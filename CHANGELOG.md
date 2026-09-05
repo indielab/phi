@@ -19,6 +19,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- Fix PowerShell installer parsing of checksum mismatch errors.
+
 ### Security
 
 <!-- Released section -->
