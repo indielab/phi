@@ -1,8 +1,8 @@
 //! Typed JSON Schema for tool parameters.
 //!
-//! Codex generates these via `schemars` from Rust argument structs. This crate
-//! stays dependency-free, so authors build an equivalent schema with the
-//! builders below; the wire still carries opaque JSON Schema bytes (same as
+//! Codex generates these via `schemars` from Rust argument structs. Authors
+//! build an equivalent schema with the builders below, serialized with
+//! `serde_json`; the wire still carries opaque JSON Schema bytes (same as
 //! Go's `Parameters map[string]any` after `json.Marshal`).
 
 use std::collections::BTreeMap;
@@ -53,6 +53,38 @@ impl Default for Node {
             enum_values: Vec::new(),
             items: None,
         }
+    }
+}
+
+/// Serializes a schema node as JSON Schema. Keys are emitted in a fixed order
+/// (`type`, `description`, …) and `serde_json`'s `preserve_order` keeps that
+/// order on the wire, so the bytes are stable across runs.
+impl serde::Serialize for Node {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut m = s.serialize_map(Some(3))?;
+        m.serialize_entry("type", kind_str(self.kind))?;
+        if let Some(d) = &self.description {
+            m.serialize_entry("description", d)?;
+        }
+        if self.kind == Kind::Object {
+            m.serialize_entry("properties", &self.properties)?;
+            if !self.required.is_empty() {
+                m.serialize_entry("required", &self.required)?;
+            }
+            if let Some(allow) = self.additional_properties {
+                m.serialize_entry("additionalProperties", &allow)?;
+            }
+        }
+        if self.kind == Kind::String && !self.enum_values.is_empty() {
+            m.serialize_entry("enum", &self.enum_values)?;
+        }
+        if self.kind == Kind::Array {
+            if let Some(items) = &self.items {
+                m.serialize_entry("items", items.as_ref())?;
+            }
+        }
+        m.end()
     }
 }
 
@@ -179,9 +211,7 @@ impl Schema {
         match &self.inner {
             SchemaInner::Raw(b) => b.clone(),
             SchemaInner::Built(n) => {
-                let mut s = String::new();
-                write_node(&mut s, n);
-                s.into_bytes()
+                serde_json::to_vec(n).expect("schema serialization cannot fail")
             }
         }
     }
@@ -199,72 +229,6 @@ impl From<&[u8]> for Schema {
     }
 }
 
-fn write_node(out: &mut String, n: &Node) {
-    out.push('{');
-    let mut first = true;
-    push_key(out, &mut first, "type");
-    push_json_string(out, kind_str(n.kind));
-
-    if let Some(d) = &n.description {
-        push_key(out, &mut first, "description");
-        push_json_string(out, d);
-    }
-
-    if n.kind == Kind::Object {
-        push_key(out, &mut first, "properties");
-        out.push('{');
-        let mut pfirst = true;
-        for (name, child) in &n.properties {
-            if !pfirst {
-                out.push(',');
-            }
-            pfirst = false;
-            push_json_string(out, name);
-            out.push(':');
-            write_node(out, child);
-        }
-        out.push('}');
-
-        if !n.required.is_empty() {
-            push_key(out, &mut first, "required");
-            out.push('[');
-            for (i, name) in n.required.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                push_json_string(out, name);
-            }
-            out.push(']');
-        }
-
-        if let Some(allow) = n.additional_properties {
-            push_key(out, &mut first, "additionalProperties");
-            out.push_str(if allow { "true" } else { "false" });
-        }
-    }
-
-    if n.kind == Kind::String && !n.enum_values.is_empty() {
-        push_key(out, &mut first, "enum");
-        out.push('[');
-        for (i, v) in n.enum_values.iter().enumerate() {
-            if i > 0 {
-                out.push(',');
-            }
-            push_json_string(out, v);
-        }
-        out.push(']');
-    }
-
-    if n.kind == Kind::Array {
-        if let Some(items) = &n.items {
-            push_key(out, &mut first, "items");
-            write_node(out, items);
-        }
-    }
-
-    out.push('}');
-}
-
 fn kind_str(k: Kind) -> &'static str {
     match k {
         Kind::Object => "object",
@@ -274,31 +238,6 @@ fn kind_str(k: Kind) -> &'static str {
         Kind::Boolean => "boolean",
         Kind::Array => "array",
     }
-}
-
-fn push_key(out: &mut String, first: &mut bool, key: &str) {
-    if !*first {
-        out.push(',');
-    }
-    *first = false;
-    push_json_string(out, key);
-    out.push(':');
-}
-
-fn push_json_string(out: &mut String, s: &str) {
-    out.push('"');
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
 }
 
 #[cfg(test)]

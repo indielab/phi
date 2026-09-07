@@ -130,7 +130,8 @@ impl Command {
 }
 
 /// Modal yes/no dialog shown by the host.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "PascalCase")] // host unmarshals into Go's ext.ConfirmRequest
 pub struct ConfirmRequest {
     pub title: String,
     pub message: String,
@@ -871,44 +872,13 @@ impl Context<'_> {
     }
 }
 
-/// Encodes a [`ConfirmRequest`] as the JSON the host parses. The host
+/// Serializes a [`ConfirmRequest`] as the JSON the host parses. The host
 /// unmarshals into Go's `ext.ConfirmRequest` (fields `Title`/`Message`/
-/// `Yes`/`No`/`Danger`), so key names and presence must match exactly —
-/// hence hand-rolled rather than a serde dependency.
+/// `Yes`/`No`/`Danger`); `serde`'s `rename_all = "PascalCase"` pins the key
+/// names to that contract, and `serde_json` handles escaping.
 fn confirm_request_json(req: &ConfirmRequest) -> String {
-    let mut s = String::with_capacity(
-        64 + req.title.len() + req.message.len() + req.yes.len() + req.no.len(),
-    );
-    s.push_str(r#"{"Title":"#);
-    push_json_string(&mut s, &req.title);
-    s.push_str(r#","Message":"#);
-    push_json_string(&mut s, &req.message);
-    s.push_str(r#","Yes":"#);
-    push_json_string(&mut s, &req.yes);
-    s.push_str(r#","No":"#);
-    push_json_string(&mut s, &req.no);
-    s.push_str(r#","Danger":"#);
-    s.push_str(if req.danger { "true" } else { "false" });
-    s.push('}');
-    s
-}
-
-/// Appends `s` as a JSON string literal (control chars escaped; `<`, `>`,
-/// `&` are left as-is, which Go escapes but any JSON parser accepts).
-fn push_json_string(out: &mut String, s: &str) {
-    out.push('"');
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
+    serde_json::to_string(req)
+        .expect("ConfirmRequest holds only strings/bool; serialization cannot fail")
 }
 
 fn push_unique(xs: &mut Vec<pxb::Event>, v: pxb::Event) {

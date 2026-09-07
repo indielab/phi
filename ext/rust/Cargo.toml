@@ -10,3 +10,5 @@ keywords = ["phi", "coding-agent", "extension", "pxb"]
 categories = ["development-tools"]
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }

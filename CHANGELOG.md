@@ -14,7 +14,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
-
+- Rust SDK (`ext/rust`): tool-schema and confirm-dialog JSON now serializes with `serde`/`serde_json` instead of hand-rolled writers (wire output unchanged; `preserve_order` keeps key order).
 ### Deprecated
 
 ### Removed

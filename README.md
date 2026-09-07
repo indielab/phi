@@ -20,7 +20,7 @@ A minimal terminal coding agent harness in Go — a sibling to Pi.
 - **Hashline edits** — edit by whole-file `@file path#TAG` plus line `LINE#HASH` anchors (same idea as [oh-my-pi](https://github.com/can1357/oh-my-pi)): the model points at anchors instead of rewriting whole files; stale tags/hashes are rejected so over-edits and silent corruption stop here
 - **Permission gate** — Gate / Ask before destructive tools fire; safety is not optional when an agent can touch your tree
 - **MCP without context death** — configure as many MCP servers as you want; their tool schemas **never** enter the model prompt. The system prompt lists **server names** only (like the Skills catalog); the agent uses three meta-tools (`mcp_list` / `mcp_inspect` / `mcp_call`) to discover and call on demand. Same Gate / Ask / Hooks path as built-in tools. See [MCP](#mcp)
-- **Extensions (Go or Rust)** — native binaries speak the **PXB** binary protocol over stdin/stdout; official author SDKs for Go ([`ext/go`](ext/go)) and a zero-dependency Rust port ([`ext/rust`](ext/rust)): LLM tools, slash commands, event intercepts, confirm dialogs — no JSON, no reflection. See [Extensions](#extensions)
+- **Extensions (Go or Rust)** — native binaries speak the **PXB** binary protocol over stdin/stdout; official author SDKs for Go ([`ext/go`](ext/go)) and Rust ([`ext/rust`](ext/rust)): LLM tools, slash commands, event intercepts, confirm dialogs — no reflection; JSON at the SDK edges via `serde_json`. See [Extensions](#extensions)
 - **Any model** — OpenAI-compatible or Anthropic, no vendor lock-in
 
 ![phi welcome](assets/phi.png)
