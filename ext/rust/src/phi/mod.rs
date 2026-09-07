@@ -145,8 +145,6 @@ pub struct ConfirmReply {
     pub ok: bool,
 }
 
-// ── Intercept event payloads (mirror `ext/types.go`) ────────────────────────
-
 #[derive(Debug, Clone, Default)]
 pub struct ToolCallEvent {
     pub tool_name: String,
@@ -235,8 +233,6 @@ pub struct TurnStoppingResult {
     pub message: String,
     pub reason: String,
 }
-
-// ── Extension ───────────────────────────────────────────────────────────────
 
 /// Registered intercept / subscribe handlers. Kept as one struct so `run`
 /// can destructure the [`Extension`] into independent fields (each handler
@@ -381,8 +377,6 @@ impl Extension {
         serve(&mut rd, &mut wr, host, tools, commands, handlers)
     }
 }
-
-// ── Handshake, registration, and frame dispatch ──────────────────────────
 
 /// Exchanges the HELLO handshake and fills [`HostInfo`] from the host's ack.
 fn handshake(rd: &mut Rd, wr: &mut Wr, ext: &Extension) -> Result<HostInfo, Error> {
