@@ -10,12 +10,30 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+<!-- Released section -->
+<!-- Don't change this section unless doing release -->
+
+## [0.23.0] - 2026-09-07
+
+### Added
+
 - Gemini endpoints (Google AI Studio / Vertex AI): streaming chat and compaction with tool calling, image input, system prompts, and model thinking surfaced as reasoning. (`llm`)
 - `phi plugin list` / `phi plugin update [repo[@ref]] [--check]` / `phi plugin remove <repo>` (alias `rm`): audit and update extensions without manual removal. Install records the GitHub source in `~/.phi/extensions/<repo>/.phi-install.json`; `update` re-resolves that source and swaps the directory atomically (release archive preferred, git clone fallback, pinned tags stay pinned unless overridden). Extensions not installed via `phi plugin install` are left untouched.
 
 ### Changed
 
 - Rust SDK (`ext/rust`): tool-schema and confirm-dialog JSON now serializes with `serde`/`serde_json` instead of hand-rolled writers (wire output unchanged; `preserve_order` keeps key order).
+
 ### Deprecated
 
 ### Removed
@@ -26,9 +44,6 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Extension footer status (e.g. plan-mode hints) is reset when extensions are reloaded or the model is switched, so stale text no longer outlives the extension subprocess.
 
 ### Security
-
-<!-- Released section -->
-<!-- Don't change this section unless doing release -->
 
 ## [0.22.0] - 2026-09-04
 
@@ -355,7 +370,9 @@ Earlier releases are available from GitHub tags only.
 
 <!-- Released section ended -->
 
-[Unreleased]: https://github.com/pulseaiclub/phi/compare/v0.21.1...HEAD
+[Unreleased]: https://github.com/pulseaiclub/phi/compare/v0.22.0...HEAD
+[0.23.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.23.0
+[0.22.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.22.0
 [0.21.1]: https://github.com/pulseaiclub/phi/releases/tag/v0.21.1
 [0.21.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.21.0
 [0.20.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.20.0
