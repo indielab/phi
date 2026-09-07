@@ -4,8 +4,9 @@ Rust is a **first-class language for Phi extensions** — on par with the Go SDK
 in [`ext/go`](../go). Same PXB wire protocol on stdin/stdout, same host
 features (LLM tools, slash commands, intercepts, event subscriptions, confirm
 dialogs), byte-for-byte interop, and the same install flow (`phi.yaml` + a
-binary under `~/.phi/extensions/<name>/`). This crate is the zero-dependency
-Rust authoring side: no JSON, no reflection, no runtime deps.
+binary under `~/.phi/extensions/<name>/`). The only dependencies are
+`serde`/`serde_json` at the JSON edges (tool schemas, confirm payloads); the
+PXB wire codec stays hand-rolled — no reflection, no runtime protocol deps.
 
 Wire compatibility with the Go SDK is pinned byte-for-byte by golden tests
 against `ext/go/pxb/testdata/*.bin` (`tests/pxb_test.rs`).

@@ -360,10 +360,6 @@ func resolveRipgrepPath() (string, error) {
 	return rgPath, rgPathErr
 }
 
-// ---------------------------------------------------------------------------
-// grep block formatting
-// ---------------------------------------------------------------------------
-
 func formatGrepBlock(
 	formatPath func(string) string,
 	getLines func(string) []string,
@@ -407,10 +403,6 @@ func formatGrepBlock(
 	}
 	return lines, anyLineTruncated
 }
-
-// ---------------------------------------------------------------------------
-// truncation helpers
-// ---------------------------------------------------------------------------
 
 func truncateLine(line string, maxChars int) (string, bool) {
 	if maxChars <= 0 {
@@ -458,10 +450,6 @@ func truncateHead(content string, maxBytes int) truncResult {
 	}
 	return truncResult{Content: content, Truncated: false}
 }
-
-// ---------------------------------------------------------------------------
-// misc helpers
-// ---------------------------------------------------------------------------
 
 func formatBytes(n int) string {
 	if n < 1024 {

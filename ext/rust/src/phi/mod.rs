@@ -130,7 +130,8 @@ impl Command {
 }
 
 /// Modal yes/no dialog shown by the host.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "PascalCase")] // host unmarshals into Go's ext.ConfirmRequest
 pub struct ConfirmRequest {
     pub title: String,
     pub message: String,
@@ -144,8 +145,6 @@ pub struct ConfirmRequest {
 pub struct ConfirmReply {
     pub ok: bool,
 }
-
-// ── Intercept event payloads (mirror `ext/types.go`) ────────────────────────
 
 #[derive(Debug, Clone, Default)]
 pub struct ToolCallEvent {
@@ -235,8 +234,6 @@ pub struct TurnStoppingResult {
     pub message: String,
     pub reason: String,
 }
-
-// ── Extension ───────────────────────────────────────────────────────────────
 
 /// Registered intercept / subscribe handlers. Kept as one struct so `run`
 /// can destructure the [`Extension`] into independent fields (each handler
@@ -381,8 +378,6 @@ impl Extension {
         serve(&mut rd, &mut wr, host, tools, commands, handlers)
     }
 }
-
-// ── Handshake, registration, and frame dispatch ──────────────────────────
 
 /// Exchanges the HELLO handshake and fills [`HostInfo`] from the host's ack.
 fn handshake(rd: &mut Rd, wr: &mut Wr, ext: &Extension) -> Result<HostInfo, Error> {
@@ -877,44 +872,13 @@ impl Context<'_> {
     }
 }
 
-/// Encodes a [`ConfirmRequest`] as the JSON the host parses. The host
+/// Serializes a [`ConfirmRequest`] as the JSON the host parses. The host
 /// unmarshals into Go's `ext.ConfirmRequest` (fields `Title`/`Message`/
-/// `Yes`/`No`/`Danger`), so key names and presence must match exactly —
-/// hence hand-rolled rather than a serde dependency.
+/// `Yes`/`No`/`Danger`); `serde`'s `rename_all = "PascalCase"` pins the key
+/// names to that contract, and `serde_json` handles escaping.
 fn confirm_request_json(req: &ConfirmRequest) -> String {
-    let mut s = String::with_capacity(
-        64 + req.title.len() + req.message.len() + req.yes.len() + req.no.len(),
-    );
-    s.push_str(r#"{"Title":"#);
-    push_json_string(&mut s, &req.title);
-    s.push_str(r#","Message":"#);
-    push_json_string(&mut s, &req.message);
-    s.push_str(r#","Yes":"#);
-    push_json_string(&mut s, &req.yes);
-    s.push_str(r#","No":"#);
-    push_json_string(&mut s, &req.no);
-    s.push_str(r#","Danger":"#);
-    s.push_str(if req.danger { "true" } else { "false" });
-    s.push('}');
-    s
-}
-
-/// Appends `s` as a JSON string literal (control chars escaped; `<`, `>`,
-/// `&` are left as-is, which Go escapes but any JSON parser accepts).
-fn push_json_string(out: &mut String, s: &str) {
-    out.push('"');
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
+    serde_json::to_string(req)
+        .expect("ConfirmRequest holds only strings/bool; serialization cannot fail")
 }
 
 fn push_unique(xs: &mut Vec<pxb::Event>, v: pxb::Event) {

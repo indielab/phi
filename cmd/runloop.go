@@ -256,8 +256,6 @@ func selectBuiltinTools(raw string) ([]tools.Tool, error) {
 	return selected, nil
 }
 
-// --- JSONL event schema ---------------------------------------------------
-
 // jsonlEncoder writes the pinned event schema to a writer. Fields are
 // explicit so the wire format never depends on Go struct tags of internal
 // session types and never carries API keys or other config secrets.
