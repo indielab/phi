@@ -37,6 +37,13 @@ func (assistantBlock *AssistantBlock) Draw(ctx components.DrawContext) component
 		w = 40
 	}
 	spans := text.RenderMarkdown(assistantBlock.Text, th)
+	if assistantBlock.State == session.StateError && assistantBlock.Text != "" {
+		// Error turns read like tool failures: red body under an "Error:" label.
+		spans = append([]components.Span{{Text: "Error: ", Style: th.Destructive}}, spans...)
+		for i := range spans {
+			spans[i].Style = th.Destructive
+		}
+	}
 	if assistantBlock.State == session.StateCancelled && assistantBlock.Text != "" {
 		if len(spans) > 0 {
 			spans = append(spans, components.Span{Text: "\n", Style: th.Muted})

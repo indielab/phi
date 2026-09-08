@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"iter"
 	"net/http"
@@ -258,7 +257,7 @@ func Stream(
 		defer httpResp.Body.Close()
 		if httpResp.StatusCode != http.StatusOK {
 			raw, _ := io.ReadAll(httpResp.Body)
-			yield(llm.StreamEvent{}, fmt.Errorf("gemini API error: (%d) %s", httpResp.StatusCode, string(raw)))
+			yield(llm.StreamEvent{}, llm.FormatAPIError("gemini", httpResp.StatusCode, raw))
 			return
 		}
 		processStream(httpResp.Body, yield)
@@ -418,7 +417,7 @@ func Compact(
 		return "", err
 	}
 	if httpResp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("gemini API error: (%d) %s", httpResp.StatusCode, string(raw))
+		return "", llm.FormatAPIError("gemini", httpResp.StatusCode, raw)
 	}
 	var resp chunk
 	if err := json.Unmarshal(raw, &resp); err != nil {
