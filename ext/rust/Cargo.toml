@@ -1,6 +1,6 @@
 [package]
 name = "phi-ext"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.75"
 description = "Rust author SDK for Phi PXB extensions (port of ext/go)"
@@ -12,3 +12,4 @@ categories = ["development-tools"]
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1", default-features = false, features = ["rt"] }
