@@ -8,18 +8,14 @@ import (
 
 // CopyText writes plain text to the system clipboard.
 func CopyText(text string) error {
-	text = strings.TrimSpace(text)
-	if text == "" {
+	if strings.TrimSpace(text) == "" {
 		return ErrEmpty
 	}
 	switch runtime.GOOS {
 	case "darwin":
 		return pipeToCommand("pbcopy", []byte(text))
 	case "windows":
-		if err := pipeToCommand("clip", []byte(text)); err == nil {
-			return nil
-		}
-		return pipeToCommand("powershell", []byte(text), "-NoProfile", "-Command", "$Input | Set-Clipboard")
+		return copyTextWindows(text)
 	default:
 		if lookPath("wl-copy") {
 			if err := pipeToCommand("wl-copy", []byte(text)); err == nil {

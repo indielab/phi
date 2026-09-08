@@ -18,6 +18,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- Preserve Unicode when copying TUI text to the Windows clipboard.
+
 ### Security
 
 <!-- Released section -->
