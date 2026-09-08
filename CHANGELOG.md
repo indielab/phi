@@ -10,6 +10,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+<!-- Released section -->
+<!-- Don't change this section unless doing release -->
+
+## [0.24.0] - 2026-09-08
+
+### Added
+
 - Extensions: tools can be marked `Readable` (side-effect-free) via the Go
   SDK `Tool.Readable` or the Rust SDK `Tool::readable()`; the host surfaces
   it as `Definition.Readable`, so a batch of all-readable calls — including
@@ -38,9 +55,6 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Fixed
 
 ### Security
-
-<!-- Released section -->
-<!-- Don't change this section unless doing release -->
 
 ## [0.23.0] - 2026-09-07
 
@@ -389,7 +403,8 @@ Earlier releases are available from GitHub tags only.
 
 <!-- Released section ended -->
 
-[Unreleased]: https://github.com/pulseaiclub/phi/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/pulseaiclub/phi/compare/v0.23.0...HEAD
+[0.24.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.24.0
 [0.23.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.23.0
 [0.22.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.22.0
 [0.21.1]: https://github.com/pulseaiclub/phi/releases/tag/v0.21.1
