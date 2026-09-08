@@ -29,6 +29,7 @@ const F_REG_TOOL_DESC: u16 = 2;
 const F_REG_TOOL_SCHEMA: u16 = 3;
 const F_REG_TOOL_TIMEOUT_SEC: u16 = 4;
 const F_REG_TOOL_HAS_DETAIL: u16 = 5;
+const F_REG_TOOL_READABLE: u16 = 6;
 
 const F_SUB_EVENTS: u16 = 1;
 const F_SUB_INTERCEPT: u16 = 2;
@@ -241,6 +242,9 @@ pub struct RegisterTool {
     /// Extension can answer [`TYPE_TOOL_DETAIL_INVOKE`](crate::pxb::TYPE_TOOL_DETAIL_INVOKE).
     /// `false` omits the wire field (backward compatible).
     pub has_detail: bool,
+    /// Side-effect-free; the host may batch read-only calls concurrently.
+    /// `false` omits the wire field (old hosts stay sequential).
+    pub readable: bool,
 }
 
 pub fn encode_register_tool(r: &RegisterTool) -> Vec<u8> {
@@ -254,6 +258,9 @@ pub fn encode_register_tool(r: &RegisterTool) -> Vec<u8> {
     if r.has_detail {
         fw.put_bool(F_REG_TOOL_HAS_DETAIL, true);
     }
+    if r.readable {
+        fw.put_bool(F_REG_TOOL_READABLE, true);
+    }
     fw.into_vec()
 }
 
@@ -266,6 +273,7 @@ pub fn decode_register_tool(b: &[u8]) -> Result<RegisterTool, Error> {
             F_REG_TOOL_SCHEMA => r.schema_json = take_bytes(kind, fr)?.to_vec(),
             F_REG_TOOL_TIMEOUT_SEC => r.timeout_sec = take_u64(kind, fr)? as u32,
             F_REG_TOOL_HAS_DETAIL => r.has_detail = take_u64(kind, fr)? != 0,
+            F_REG_TOOL_READABLE => r.readable = take_u64(kind, fr)? != 0,
             _ => fr.skip(kind)?,
         }
         Ok(())
@@ -792,6 +800,7 @@ mod tests {
                     schema_json: br#"{"type":"object"}"#.to_vec(),
                     timeout_sec: 120,
                     has_detail: true,
+                    readable: true,
                 }),
                 |b| Ok(encode_register_tool(&decode_register_tool(b)?)),
             ),

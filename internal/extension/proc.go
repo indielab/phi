@@ -563,6 +563,7 @@ func (p *Proc) BuildAPI(api *ext.API) {
 			Description:    t.Description,
 			Parameters:     params,
 			DetailFromArgs: detailFn,
+			Readable:       t.Readable,
 			Execute: func(ctx context.Context, args json.RawMessage) (ext.ToolResult, error) {
 				return p.CallTool(ctx, name, args)
 			},

@@ -281,6 +281,7 @@ func toolFromDef(def ext.Tool) tools.Tool {
 			Name:        def.Name,
 			Description: def.Description,
 			Params:      params,
+			Readable:    def.Readable,
 		},
 		DetailFromArgs: def.DetailFromArgs,
 		Run: func(ctx context.Context, input json.RawMessage) (tools.Result, error) {

@@ -152,7 +152,10 @@ type Tool struct {
 	// DetailFromArgs extracts a one-line TUI detail before Execute runs.
 	// When set, the host RPCs the extension instead of showing raw JSON args.
 	DetailFromArgs func(input json.RawMessage) string
-	Execute        func(ctx context.Context, args json.RawMessage) (ToolResult, error)
+	// Readable marks a side-effect-free tool. A batch of calls that all
+	// target Readable tools may run concurrently on the host.
+	Readable bool
+	Execute  func(ctx context.Context, args json.RawMessage) (ToolResult, error)
 }
 
 // ToolInfo describes a configured tool for GetAllTools.

@@ -10,6 +10,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- Extensions: tools can be marked `Readable` (side-effect-free) via the Go
+  SDK `Tool.Readable` or the Rust SDK `Tool::readable()`; the host surfaces
+  it as `Definition.Readable`, so a batch of all-readable calls — including
+  extension tools — runs concurrently.
+
 ### Changed
 
 - Agent: when every tool call in a turn targets a read-only tool

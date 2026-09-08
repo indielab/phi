@@ -320,6 +320,7 @@ func (extension *ExtensionAPI) Run() error {
 		reg := pxb.RegisterTool{
 			Name: t.def.Name, Description: t.def.Description, SchemaJSON: schema,
 			HasDetail: t.def.DetailFromArgs != nil,
+			Readable:  t.def.Readable,
 		}
 		if t.def.TimeoutSec > 0 {
 			reg.TimeoutSec = uint32(t.def.TimeoutSec) //nolint:gosec // G115: author-supplied seconds; host clamps
