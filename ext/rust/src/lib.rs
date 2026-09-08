@@ -8,8 +8,9 @@
 //!   stdin/stdout
 //!
 //! The only external dependencies are `serde`/`serde_json` at the JSON edges
-//! (tool schemas, confirm payloads); the wire format itself needs no
-//! reflection, so the PXB codecs stay hand-rolled and lean.
+//! (tool schemas, confirm payloads) plus `tokio` (`rt` feature) to drive async
+//! tool handlers; the wire format itself needs no reflection, so the PXB
+//! codecs stay hand-rolled and lean.
 //!
 //! # Example
 //!

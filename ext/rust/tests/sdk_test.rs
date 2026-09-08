@@ -255,6 +255,25 @@ fn full_extension_confirm_tool_and_submit() {
     let detail = pxb::decode_tool_detail_result(&f.body).unwrap();
     assert_eq!(detail.detail, r#"{"text":"hi"}"#);
 
+    // Async tool handler: the SDK drives the returned future to completion
+    // on its single-threaded runtime (the handler yields once inside).
+    h.write(
+        pxb::TYPE_TOOL_INVOKE,
+        pxb::FLAG_HAS_ID,
+        11,
+        &pxb::encode_tool_invoke(&pxb::ToolInvoke {
+            name: "async-echo".into(),
+            args: br#"{"text":"yo"}"#.to_vec(),
+        }),
+    );
+    let f = h.read();
+    assert_eq!(f.header.typ, pxb::TYPE_TOOL_RESULT);
+    assert_eq!(f.header.id, 11);
+    let tr = pxb::decode_tool_result(&f.body).unwrap();
+    assert!(!tr.is_error);
+    assert_eq!(tr.content, r#"async echo: {"text":"yo"}"#);
+    assert!(tr.error.is_empty());
+
     h.shutdown();
 }
 

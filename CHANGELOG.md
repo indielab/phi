@@ -12,6 +12,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- Rust SDK (`ext/rust`): tool `execute` handlers can now be async
+  (`Tool::new_async`) — the SDK drives them to completion on a
+  single-threaded tokio runtime, so network / IO calls work without blocking
+  tricks; sync `Tool::new` handlers are unchanged.
+
 ### Deprecated
 
 ### Removed
