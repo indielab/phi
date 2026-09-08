@@ -5,7 +5,8 @@ in [`ext/go`](../go). Same PXB wire protocol on stdin/stdout, same host
 features (LLM tools, slash commands, intercepts, event subscriptions, confirm
 dialogs), byte-for-byte interop, and the same install flow (`phi.yaml` + a
 binary under `~/.phi/extensions/<name>/`). The only dependencies are
-`serde`/`serde_json` at the JSON edges (tool schemas, confirm payloads); the
+`serde`/`serde_json` at the JSON edges (tool schemas, confirm payloads) plus
+`tokio` (`rt` feature) to drive async tool handlers; the
 PXB wire codec stays hand-rolled — no reflection, no runtime protocol deps.
 
 Wire compatibility with the Go SDK is pinned byte-for-byte by golden tests
@@ -59,9 +60,35 @@ fn main() -> Result<(), phi::Error> {
 }
 ```
 
+Tools are usually IO-bound, so handlers may be async — the SDK runs them on a
+single-threaded tokio runtime that blocks the PXB loop the same way a sync
+handler would (the host waits for the result anyway):
+
+```rust,no_run
+use phi_ext::phi;
+
+m.register_tool(phi::Tool::new_async(
+    "fetch",
+    "GET a URL and return its length",
+    phi::Schema::object().property("url", phi::Schema::string()),
+    |args| async move {
+        // args is owned (Vec<u8>), so `async move` can capture it directly.
+        // Network / IO calls (reqwest, tokio, …) go here.
+        Ok(phi::ToolResult {
+            content: format!("got {} bytes of args", args.len()),
+            ..Default::default()
+        })
+    },
+));
+```
+
+Sync handlers keep working unchanged via [`phi::Tool::new`] — the two share
+one storage type, so a tool can switch to async without touching its schema.
+
 Command handlers get a [`phi::Context`](src/phi.rs) for host interaction:
 `notify`, `set_status`, `submit`, `send_user_message`, `confirm`,
-`confirm_opts`.
+`confirm_opts`. Commands themselves stay synchronous: their `Context` reads
+nested PXB frames off the same pipe, which only works on the loop thread.
 
 Build and install (a `phi.yaml` manifest must live next to the binary):
 

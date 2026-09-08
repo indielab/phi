@@ -16,6 +16,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   (`Definition.Readable` — read/grep/ls/find), the calls now execute
   concurrently; results keep call order, and any write-capable call in the
   batch falls back to sequential execution.
+- Rust SDK (`ext/rust`): tool `execute` handlers can now be async
+  (`Tool::new_async`) — the SDK drives them to completion on a
+  single-threaded tokio runtime, so network / IO calls work without blocking
+  tricks; sync `Tool::new` handlers are unchanged.
 
 ### Deprecated
 
