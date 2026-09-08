@@ -217,3 +217,50 @@ func TestCompactUsesNonStreamingEndpoint(t *testing.T) {
 	assert.Equal(t, "summary", out)
 	assert.Equal(t, "/models/gemini-2.5-flash:generateContent", gotPath)
 }
+
+func TestCompactFormatsAPIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(
+			w,
+			`{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}`,
+		)
+	}))
+	defer srv.Close()
+
+	_, err := Compact(
+		t.Context(),
+		srv.Client(),
+		llm.ModelConfig{Name: "gemini-2.5-flash", BaseURL: srv.URL, APIKey: "bad"},
+		"summarize",
+	)
+	require.Error(t, err)
+	assert.Equal(t, "gemini API error (400): API key not valid. Please pass a valid API key.", err.Error())
+}
+
+func TestStreamFormatsAPIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(
+			w,
+			`{"error":{"code":401,"message":"API key not valid. Please pass a valid API key.","status":"UNAUTHENTICATED"}}`,
+		)
+	}))
+	defer srv.Close()
+
+	req := BuildRequest("", []llm.Message{{Role: llm.RoleUser, Content: "hi"}}, nil)
+	var gotErr error
+	for _, err := range Stream(
+		t.Context(),
+		srv.Client(),
+		llm.ModelConfig{Name: "gemini-2.5-flash", BaseURL: srv.URL, APIKey: "bad"},
+		&req,
+	) {
+		if err != nil {
+			gotErr = err
+			break
+		}
+	}
+	require.Error(t, gotErr)
+	assert.Equal(t, "gemini API error (401): API key not valid. Please pass a valid API key.", gotErr.Error())
+}

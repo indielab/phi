@@ -25,6 +25,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   (`Tool::new_async`) — the SDK drives them to completion on a
   single-threaded tokio runtime, so network / IO calls work without blocking
   tricks; sync `Tool::new` handlers are unchanged.
+- LLM provider errors now read as one compact line — e.g. `anthropic API error
+  (400): prompt is too long` — using the provider's own message instead of a
+  raw JSON body, which can no longer flood the terminal or session history.
+- TUI: assistant blocks that end in error state render their body in red under
+  an `Error:` label, so failures read like tool errors.
 
 ### Deprecated
 

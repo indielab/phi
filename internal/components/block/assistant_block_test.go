@@ -84,6 +84,25 @@ func TestAssistantBlockDraw(t *testing.T) {
 			},
 		},
 		{
+			name:         "error renders red prefixed body",
+			text:         "boom",
+			state:        session.StateError,
+			width:        60,
+			wantWidth:    60,
+			wantContains: []string{"Error: boom"},
+			wantCells: []cellCheck{
+				{x: 0, y: 0, style: th.Destructive}, // "Error:" label
+				{x: 7, y: 0, style: th.Destructive}, // error body
+			},
+		},
+		{
+			name:           "error with empty text renders no label",
+			state:          session.StateError,
+			width:          60,
+			wantWidth:      60,
+			wantNotContain: []string{"Error:"},
+		},
+		{
 			name:          "cancelled appends muted label",
 			text:          "partial",
 			state:         session.StateCancelled,
