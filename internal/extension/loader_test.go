@@ -246,6 +246,43 @@ func main() {
 	assert.Equal(t, "ping-detail", detail)
 }
 
+func TestRegisterToolReadablePropagates(t *testing.T) {
+	root := t.TempDir()
+	extDir := filepath.Join(root, "readable")
+	src := `package main
+
+import (
+	"context"
+	"encoding/json"
+
+	"github.com/pulseaiclub/phi/ext/go"
+	"github.com/pulseaiclub/phi/ext/go/phi"
+)
+
+func main() {
+	m := phi.New("readable", "0.0.1")
+	m.RegisterTool(ext.Tool{
+		Name:        "read",
+		Description: "Read a file",
+		Parameters:  map[string]any{"type": "object"},
+		Readable:    true,
+		Execute: func(ctx context.Context, args json.RawMessage) (ext.ToolResult, error) {
+			return ext.ToolResult{Content: "ok"}, nil
+		},
+	})
+	_ = m.Run()
+}
+`
+	require.NoError(t, extension.Materialize(t.Context(), extDir, "readable", "0.0.1", src))
+	m, err := extension.ReadManifest(extDir)
+	require.NoError(t, err)
+	proc, err := extension.StartProc(t.Context(), m, extDir, t.TempDir(), root, "")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = proc.Close() })
+	require.Len(t, proc.Tools(), 1)
+	assert.True(t, proc.Tools()[0].Readable)
+}
+
 func TestRegisterCommandNeedsArgsPropagates(t *testing.T) {
 	root := t.TempDir()
 	extDir := filepath.Join(root, "plan")

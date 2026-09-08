@@ -35,6 +35,7 @@ const (
 	fRegToolSchema     uint16 = 3
 	fRegToolTimeoutSec uint16 = 4 // host RPC wait for ToolInvoke; 0 = host default
 	fRegToolHasDetail  uint16 = 5 // tool advertises DetailFromArgs
+	fRegToolReadable   uint16 = 6 // side-effect-free; host may batch read-only calls
 
 	fSubEvents    uint16 = 1
 	fSubIntercept uint16 = 2
@@ -259,6 +260,10 @@ type RegisterTool struct {
 	// HasDetail means the extension can answer TypeToolDetailInvoke.
 	// False omits the wire field (backward compatible with old hosts).
 	HasDetail bool
+	// Readable marks a side-effect-free tool: the host may run a batch of
+	// Readable calls concurrently. False omits the wire field (old hosts
+	// see the tool as non-readable and stay sequential).
+	Readable bool
 }
 
 func EncodeRegisterTool(r RegisterTool) []byte {
@@ -271,6 +276,9 @@ func EncodeRegisterTool(r RegisterTool) []byte {
 	}
 	if r.HasDetail {
 		fw.PutBool(fRegToolHasDetail, true)
+	}
+	if r.Readable {
+		fw.PutBool(fRegToolReadable, true)
 	}
 	return fw.Bytes()
 }
@@ -298,6 +306,10 @@ func DecodeRegisterTool(b []byte) (RegisterTool, error) {
 		case fRegToolHasDetail:
 			v, err := takeU64(kind, fr)
 			r.HasDetail = v != 0
+			return err
+		case fRegToolReadable:
+			v, err := takeU64(kind, fr)
+			r.Readable = v != 0
 			return err
 		default:
 			return fr.Skip(kind)

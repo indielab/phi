@@ -142,7 +142,10 @@ type ToolDefinition struct {
 	Name        string              `json:"name"`
 	Description string              `json:"description"`
 	Params      *FunctionParameters `json:"parameters"`
-	Readable    bool                `json:"-"`
+	// Readable marks a side-effect-free tool: a batch of calls that all
+	// target Readable tools may run concurrently (parallel reads are safe;
+	// writes must not). Not serialized to the model.
+	Readable bool `json:"-"`
 }
 
 // FunctionParameters is JSON Schema for tool params.

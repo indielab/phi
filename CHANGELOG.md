@@ -10,8 +10,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- Extensions: tools can be marked `Readable` (side-effect-free) via the Go
+  SDK `Tool.Readable` or the Rust SDK `Tool::readable()`; the host surfaces
+  it as `Definition.Readable`, so a batch of all-readable calls — including
+  extension tools — runs concurrently.
+
 ### Changed
 
+- Agent: when every tool call in a turn targets a read-only tool
+  (`Definition.Readable` — read/grep/ls/find), the calls now execute
+  concurrently; results keep call order, and any write-capable call in the
+  batch falls back to sequential execution.
 - Rust SDK (`ext/rust`): tool `execute` handlers can now be async
   (`Tool::new_async`) — the SDK drives them to completion on a
   single-threaded tokio runtime, so network / IO calls work without blocking

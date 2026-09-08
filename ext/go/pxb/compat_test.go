@@ -144,6 +144,22 @@ func TestRegisterToolHasDetailRoundTrip(t *testing.T) {
 	assert.Equal(t, fw.Bytes(), raw)
 }
 
+func TestRegisterToolReadableRoundTrip(t *testing.T) {
+	in := pxb.RegisterTool{
+		Name: "read", Description: "read a file", SchemaJSON: []byte(`{}`), Readable: true,
+	}
+	out, err := pxb.DecodeRegisterTool(pxb.EncodeRegisterTool(in))
+	require.NoError(t, err)
+	assert.True(t, out.Readable)
+
+	// False omits the field (old hosts stay sequential).
+	raw := pxb.EncodeRegisterTool(pxb.RegisterTool{Name: "x", Description: "d"})
+	var fw pxb.FieldWriter
+	fw.PutString(1, "x")
+	fw.PutString(2, "d")
+	assert.Equal(t, fw.Bytes(), raw)
+}
+
 func TestToolDetailResultRoundTrip(t *testing.T) {
 	in := pxb.ToolDetailResult{Detail: "foo.go"}
 	out, err := pxb.DecodeToolDetailResult(pxb.EncodeToolDetailResult(in))

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -426,3 +427,109 @@ func TestExecutorToolErrorKeepsOutputEmptyForUI(t *testing.T) {
 type staticError struct{ msg string }
 
 func (e *staticError) Error() string { return e.msg }
+
+func TestExecutorRunsReadableBatchConcurrently(t *testing.T) {
+	entered := make(chan string, 2)
+	release := make(chan struct{})
+	reg := tools.Registry{
+		"readA": {
+			Definition: llm.ToolDefinition{Name: "readA", Readable: true},
+			Run: func(context.Context, json.RawMessage) (tools.Result, error) {
+				entered <- "readA"
+				<-release
+				return tools.Result{Content: "A"}, nil
+			},
+		},
+		"readB": {
+			Definition: llm.ToolDefinition{Name: "readB", Readable: true},
+			Run: func(context.Context, json.RawMessage) (tools.Result, error) {
+				entered <- "readB"
+				<-release
+				return tools.Result{Content: "B"}, nil
+			},
+		},
+	}
+	ex := NewExecutor(reg, permission.AllowAll{}, nil, nil)
+	done := make(chan struct{})
+	var msgs []llm.Message
+	go func() {
+		defer close(done)
+		msgs, _, _ = ex.Run(t.Context(), []llm.ToolCall{
+			{ID: "c1", Function: llm.Function{Name: "readA", Arguments: `{}`}},
+			{ID: "c2", Function: llm.Function{Name: "readB", Arguments: `{}`}},
+		}, func(session.ToolData) bool { return true })
+	}()
+
+	// Both handlers must be in flight before either is released: parallel run.
+	for range 2 {
+		select {
+		case <-entered:
+		case <-time.After(2 * time.Second):
+			t.Fatal("readable batch did not run concurrently")
+		}
+	}
+	close(release)
+	<-done
+
+	require.Len(t, msgs, 2)
+	assert.Equal(t, "A", msgs[0].Content, "results keep call order")
+	assert.Equal(t, "B", msgs[1].Content, "results keep call order")
+}
+
+func TestExecutorMixedBatchStaysSequential(t *testing.T) {
+	entered := make(chan string, 2)
+	release := make(chan struct{})
+	reg := tools.Registry{
+		"readA": {
+			Definition: llm.ToolDefinition{Name: "readA", Readable: true},
+			Run: func(context.Context, json.RawMessage) (tools.Result, error) {
+				entered <- "readA"
+				<-release
+				return tools.Result{Content: "A"}, nil
+			},
+		},
+		"bash": {
+			Definition: llm.ToolDefinition{Name: "bash"},
+			Run: func(context.Context, json.RawMessage) (tools.Result, error) {
+				entered <- "bash"
+				<-release
+				return tools.Result{Content: "B"}, nil
+			},
+		},
+	}
+	ex := NewExecutor(reg, permission.AllowAll{}, nil, nil)
+	done := make(chan struct{})
+	var msgs []llm.Message
+	go func() {
+		defer close(done)
+		msgs, _, _ = ex.Run(t.Context(), []llm.ToolCall{
+			{ID: "c1", Function: llm.Function{Name: "readA", Arguments: `{}`}},
+			{ID: "c2", Function: llm.Function{Name: "bash", Arguments: `{}`}},
+		}, func(session.ToolData) bool { return true })
+	}()
+
+	select {
+	case name := <-entered:
+		assert.Equal(t, "readA", name, "readable call should run first")
+	case <-time.After(2 * time.Second):
+		t.Fatal("first call never started")
+	}
+	// The write tool must not start while the first call is still running.
+	select {
+	case name := <-entered:
+		t.Fatalf("second call %q started before the first finished", name)
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case name := <-entered:
+		assert.Equal(t, "bash", name)
+	case <-time.After(2 * time.Second):
+		t.Fatal("second call never started after first released")
+	}
+	<-done
+
+	require.Len(t, msgs, 2)
+	assert.Equal(t, "A", msgs[0].Content)
+	assert.Equal(t, "B", msgs[1].Content)
+}

@@ -61,6 +61,9 @@ pub struct Tool {
     pub name: String,
     pub description: String,
     pub schema: Schema,
+    /// Side-effect-free: the host may run a batch of Readable calls
+    /// concurrently. Set with [`Tool::readable`].
+    pub readable: bool,
     /// Host RPC wait for `execute`, in seconds. `0` = host default (30s).
     pub timeout_sec: u32,
     /// Optional one-line TUI detail from raw JSON args (before execute).
@@ -84,6 +87,7 @@ impl Tool {
             schema: schema.into(),
             timeout_sec: 0,
             detail_from_args: None,
+            readable: false,
             // Sync handler: call it eagerly, hand the host a ready future.
             execute: Box::new(move |args| {
                 let result = execute(args);
@@ -112,6 +116,7 @@ impl Tool {
             description: description.into(),
             schema: schema.into(),
             timeout_sec: 0,
+            readable: false,
             detail_from_args: None,
             execute: Box::new(move |args| Box::pin(execute(args.to_vec()))),
         }
@@ -126,6 +131,13 @@ impl Tool {
     /// Sets a one-line TUI detail formatter for raw JSON arguments.
     pub fn detail_from_args(mut self, f: impl FnMut(&[u8]) -> String + 'static) -> Self {
         self.detail_from_args = Some(Box::new(f));
+        self
+    }
+
+    /// Marks this tool side-effect-free so the host may run a batch of
+    /// Readable calls concurrently.
+    pub fn readable(mut self) -> Self {
+        self.readable = true;
         self
     }
 }
@@ -471,6 +483,7 @@ fn register(wr: &mut Wr, ext: &Extension) -> Result<(), Error> {
             schema_json: tool.schema.to_json_bytes(),
             timeout_sec: tool.timeout_sec,
             has_detail: tool.detail_from_args.is_some(),
+            readable: tool.readable,
         });
         pxb::write_frame(wr, pxb::TYPE_REGISTER_TOOL, 0, 0, &body)?;
     }

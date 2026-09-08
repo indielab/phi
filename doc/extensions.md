@@ -80,6 +80,9 @@ Set `DetailFromArgs` so the TUI tool row shows a one-line summary (path, URL, �
 instead of raw JSON while the tool is in progress. The host RPCs the extension
 with a short default timeout (not `TimeoutSec`).
 
+Set `Readable: true` on side-effect-free tools (read-only lookups, pure
+computation) so the host may run a batch of all-readable calls concurrently.
+
 ```go
 m.RegisterTool(ext.Tool{
 	Name:        "fetch",
@@ -233,7 +236,9 @@ fn main() -> Result<(), phi::Error> {
 ```
 
 Slow tools should chain `.timeout_sec(n)` (host default RPC wait is 30s; clamped to 1–3600).
-Chain `.detail_from_args(|args| …)` so the TUI shows a one-line summary instead of raw JSON:
+Chain `.detail_from_args(|args| …)` so the TUI shows a one-line summary instead of raw JSON,
+and `.readable()` on side-effect-free tools so the host may run a batch of all-readable
+calls concurrently:
 
 ```rust,no_run
 m.register_tool(

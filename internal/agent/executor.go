@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/pulseaiclub/phi/internal/extension"
 	"github.com/pulseaiclub/phi/internal/llm"
@@ -30,6 +32,10 @@ type Executor struct {
 	ext       *extension.Runner // nil = disabled; methods are nil-safe no-ops
 	sessionID string
 	cwd       string
+
+	// askMu serializes approval prompts: a concurrent read-only batch can
+	// otherwise pop multiple dialogs / interleave stdin reads at once.
+	askMu sync.Mutex
 }
 
 // NewExecutor builds an executor. extRunner may be nil.
@@ -55,10 +61,42 @@ func (e *Executor) SetMeta(sessionID, cwd string) {
 	e.ext.SetMeta(sessionID, cwd)
 }
 
-// Run executes tool calls in order, yielding ToolData updates via emit.
+// Run executes tool calls and yields ToolData updates via emit.
 // Returns role=tool messages for the next LLM turn (including cancel stubs).
 // stop=true means an extension PostTool asked to end the agent loop.
+//
+// A batch whose calls all target read-only tools (Definition.Readable) runs
+// concurrently — read-only calls have no side effects, so parallel execution
+// is order-independent. Any write-capable or unknown call falls back to
+// sequential execution. Results always come back in call order.
 func (e *Executor) Run(
+	ctx context.Context,
+	calls []llm.ToolCall,
+	emit func(session.ToolData) bool,
+) (msgs []llm.Message, stop bool, stopReason string) {
+	if e.readableBatch(calls) {
+		return e.runConcurrent(ctx, calls, emit)
+	}
+	return e.runSequential(ctx, calls, emit)
+}
+
+// readableBatch reports whether every call targets a registered read-only
+// tool. Unknown tools are treated as unsafe (a typo'd name could be a write).
+func (e *Executor) readableBatch(calls []llm.ToolCall) bool {
+	if len(calls) < 2 {
+		return false
+	}
+	for _, call := range calls {
+		tool, ok := e.registry[call.Function.Name]
+		if !ok || !tool.Definition.Readable {
+			return false
+		}
+	}
+	return true
+}
+
+// runSequential executes calls one at a time, stopping at the first halt.
+func (e *Executor) runSequential(
 	ctx context.Context,
 	calls []llm.ToolCall,
 	emit func(session.ToolData) bool,
@@ -76,6 +114,57 @@ func (e *Executor) Run(
 		}
 	}
 	return results, false, ""
+}
+
+// runConcurrent executes a read-only batch in parallel, one goroutine per
+// call. UI emits are serialized so ToolData never interleaves from two
+// goroutines; results are reassembled in call order. A halt ends the turn —
+// later calls already ran, but since they are read-only their results are
+// safe to drop.
+func (e *Executor) runConcurrent(
+	ctx context.Context,
+	calls []llm.ToolCall,
+	emit func(session.ToolData) bool,
+) (msgs []llm.Message, stop bool, stopReason string) {
+	type outcome struct {
+		msg    llm.Message
+		halt   bool
+		reason string
+	}
+	outcomes := make([]outcome, len(calls))
+
+	var emitMu sync.Mutex
+	var stopped atomic.Bool
+	lockedEmit := func(td session.ToolData) bool {
+		emitMu.Lock()
+		defer emitMu.Unlock()
+		if stopped.Load() {
+			return false
+		}
+		if !emit(td) {
+			stopped.Store(true)
+			return false
+		}
+		return true
+	}
+
+	var wg sync.WaitGroup
+	for i, call := range calls {
+		wg.Go(func() {
+			msg, halt, reason := e.runOne(ctx, call, lockedEmit)
+			outcomes[i] = outcome{msg: msg, halt: halt, reason: reason}
+		})
+	}
+	wg.Wait()
+
+	msgs = make([]llm.Message, 0, len(calls))
+	for _, o := range outcomes {
+		msgs = append(msgs, o.msg)
+		if o.halt {
+			return msgs, true, o.reason
+		}
+	}
+	return msgs, false, ""
 }
 
 func (e *Executor) runOne(
@@ -224,7 +313,11 @@ func (e *Executor) checkPermission(
 			}
 			return e.rejectResult(call, detail, reason, emit), true
 		}
-		res, askErr := e.ask(ctx, req, reason)
+		res, askErr := func() (permission.AskResult, error) {
+			e.askMu.Lock()
+			defer e.askMu.Unlock()
+			return e.ask(ctx, req, reason)
+		}()
 		if askErr != nil {
 			msg := fmt.Sprintf("approval failed: %v", askErr)
 			return e.rejectResult(call, detail, msg, emit), true
