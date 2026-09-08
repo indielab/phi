@@ -219,7 +219,7 @@ func TestCompactUsesNonStreamingEndpoint(t *testing.T) {
 }
 
 func TestCompactFormatsAPIError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprint(
 			w,
@@ -239,7 +239,7 @@ func TestCompactFormatsAPIError(t *testing.T) {
 }
 
 func TestStreamFormatsAPIError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprint(
 			w,
