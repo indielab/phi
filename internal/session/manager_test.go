@@ -1,7 +1,9 @@
 package session
 
 import (
+	"fmt"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/pulseaiclub/phi/internal/llm"
@@ -222,6 +224,221 @@ func TestBuildSessionContext(t *testing.T) {
 		assert.Equal(t, "msg2", ctx[1].GetID())
 		assert.Equal(t, "msg3", ctx[2].GetID())
 	})
+
+	t.Run("second compaction drops history summarized by earlier rounds", func(t *testing.T) {
+		m1 := testMessageEntry("m1", nil)
+		m2 := testMessageEntry("m2", &m1.ID)
+		c1 := testCompactionEntry("c1", &m2.ID, "m2")
+		m3 := testMessageEntry("m3", &c1.ID)
+		m4 := testMessageEntry("m4", &m3.ID)
+		c2 := testCompactionEntry("c2", &m4.ID, "m3")
+		m5 := testMessageEntry("m5", &c2.ID)
+		entries := []MessageEntry{m1, m2, c1, m3, m4, c2, m5}
+
+		ctx := buildSessionContext(entries, m5.ID, idMap(entries))
+
+		// Round 2 summarized everything below m3, including round 1's
+		// compaction and its old history.
+		assert.Equal(t, []string{"c2", "m3", "m4", "m5"}, contextIDs(ctx))
+	})
+
+	t.Run("compaction without FirstKeptEntryID keeps only newer messages", func(t *testing.T) {
+		m1 := testMessageEntry("m1", nil)
+		m2 := testMessageEntry("m2", &m1.ID)
+		c1 := testCompactionEntry("c1", &m2.ID, "")
+		m3 := testMessageEntry("m3", &c1.ID)
+		entries := []MessageEntry{m1, m2, c1, m3}
+
+		ctx := buildSessionContext(entries, m3.ID, idMap(entries))
+
+		assert.Equal(t, []string{"c1", "m3"}, contextIDs(ctx))
+	})
+
+	t.Run("dangling FirstKeptEntryID keeps only newer messages", func(t *testing.T) {
+		m1 := testMessageEntry("m1", nil)
+		m2 := testMessageEntry("m2", &m1.ID)
+		c1 := testCompactionEntry("c1", &m2.ID, "ghost")
+		m3 := testMessageEntry("m3", &c1.ID)
+		entries := []MessageEntry{m1, m2, c1, m3}
+
+		ctx := buildSessionContext(entries, m3.ID, idMap(entries))
+
+		assert.Equal(t, []string{"c1", "m3"}, contextIDs(ctx))
+	})
+}
+
+func testMessageEntry(id string, parent *string) SessionMessageEntry {
+	return SessionMessageEntry{
+		SessionBaseEntry: SessionBaseEntry{
+			Type: EntryMessage, ID: id, ParentID: parent,
+		},
+	}
+}
+
+func testCompactionEntry(id string, parent *string, keepFrom string) CompactionEntry {
+	return CompactionEntry{
+		SessionBaseEntry: SessionBaseEntry{
+			Type: EntryCompaction, ID: id, ParentID: parent,
+		},
+		Compaction: Compaction{FirstKeptEntryID: keepFrom},
+	}
+}
+
+func idMap(entries []MessageEntry) map[string]MessageEntry {
+	byID := make(map[string]MessageEntry, len(entries))
+	for _, entry := range entries {
+		byID[entry.GetID()] = entry
+	}
+	return byID
+}
+
+func contextIDs(entries []MessageEntry) []string {
+	ids := make([]string, len(entries))
+	for i, entry := range entries {
+		ids[i] = entry.GetID()
+	}
+	return ids
+}
+
+// referenceBuildSessionContext is the pre-optimization implementation of
+// buildSessionContext, kept as an oracle for differential testing.
+func referenceBuildSessionContext(
+	entries []MessageEntry,
+	leafId string,
+	byId map[string]MessageEntry,
+) []MessageEntry {
+	if len(byId) == 0 {
+		for _, entry := range entries {
+			byId[entry.GetID()] = entry
+		}
+	}
+
+	if leafId == "" {
+		return nil
+	}
+
+	leaf, ok := byId[leafId]
+	if !ok {
+		leaf = entries[len(entries)-1]
+	}
+
+	path := make([]MessageEntry, 0, len(entries))
+	current := leaf
+	for current != nil {
+		path = append(path, current)
+		parentID := current.GetParent()
+		if parentID == nil {
+			break
+		}
+		next, ok := byId[*parentID]
+		if !ok {
+			break
+		}
+		current = next
+	}
+	slices.Reverse(path)
+
+	var (
+		messages      []MessageEntry
+		compactionIdx = -1
+	)
+	for i, m := range path {
+		if m.GetType() == EntryCompaction {
+			compactionIdx = i
+		}
+	}
+
+	appendMessage := func(entry MessageEntry) {
+		if entry.GetType() == EntryMessage {
+			messages = append(messages, entry)
+		}
+	}
+
+	if compactionIdx >= 0 {
+		compaction := path[compactionIdx]
+		messages = append(messages, compaction)
+
+		firstKeptIdx := compactionIdx
+		if ce, ok := compaction.(CompactionEntry); ok && ce.Compaction.FirstKeptEntryID != "" {
+			for i := compactionIdx; i >= 0; i-- {
+				if path[i].GetID() == ce.Compaction.FirstKeptEntryID {
+					firstKeptIdx = i
+					break
+				}
+			}
+		}
+
+		for i := firstKeptIdx; i < len(path); i++ {
+			appendMessage(path[i])
+		}
+	} else {
+		for _, entry := range path {
+			appendMessage(entry)
+		}
+	}
+	return messages
+}
+
+func TestBuildSessionContextMatchesReference(t *testing.T) {
+	// Deterministic MINSTD PRNG keeps the corpus reproducible without math/rand.
+	seed := int64(1)
+	next := func(n int) int {
+		seed = seed * 48271 % 2147483647
+		return int(seed % int64(n))
+	}
+
+	for range 2000 {
+		entries := randomContextEntries(next)
+		leafID := entries[len(entries)-1].GetID()
+
+		got := buildSessionContext(entries, leafID, idMap(entries))
+		want := referenceBuildSessionContext(entries, leafID, idMap(entries))
+
+		assert.Equal(t, contextIDs(want), contextIDs(got))
+	}
+}
+
+// randomContextEntries builds a random linear branch (messages plus zero to
+// three compaction entries) for differential testing; entry order is root
+// first, leaf last.
+func randomContextEntries(next func(n int) int) []MessageEntry {
+	var (
+		entries []MessageEntry
+		parent  *string
+		msgID   int
+		compID  int
+	)
+	appendNode := func(entry MessageEntry) {
+		entries = append(entries, entry)
+		id := entry.GetID()
+		parent = &id
+	}
+	addMessage := func() {
+		msgID++
+		appendNode(testMessageEntry(fmt.Sprintf("m%d", msgID), parent))
+	}
+	addCompaction := func() {
+		compID++
+		var keepFrom string
+		switch next(3) {
+		case 1:
+			keepFrom = "missing" // dangling ID
+		case 2:
+			if len(entries) > 0 {
+				keepFrom = entries[next(len(entries))].GetID()
+			}
+		}
+		appendNode(testCompactionEntry(fmt.Sprintf("c%d", compID), parent, keepFrom))
+	}
+
+	addMessage()
+	for range next(5) {
+		if next(2) == 0 {
+			addCompaction()
+		}
+		addMessage()
+	}
+	return entries
 }
 
 func TestReplaySnapshotEmpty(t *testing.T) {

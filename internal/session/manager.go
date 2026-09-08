@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sync"
 	"time"
 
@@ -347,9 +346,11 @@ func generateSessionID() string {
 	return hex.EncodeToString(bytes)
 }
 
-// buildSessionContext walks from the leaf back to the root and returns the
-// messages that form the LLM context: a compaction entry (if any) followed by
-// the messages kept after it.
+// buildSessionContext returns the entries that form the LLM context for the
+// branch ending at leafId, oldest first: a compaction entry (if any) followed
+// by the messages retained after it. Everything summarized by the newest
+// compaction never reaches the output, so the walk stops at the retained
+// tail instead of draining the whole branch.
 func buildSessionContext(
 	entries []MessageEntry,
 	leafId string,
@@ -360,20 +361,40 @@ func buildSessionContext(
 			byId[entry.GetID()] = entry
 		}
 	}
-
 	if leafId == "" {
 		return nil
 	}
 
 	leaf, ok := byId[leafId]
 	if !ok {
+		if len(entries) == 0 {
+			return nil
+		}
 		leaf = entries[len(entries)-1]
 	}
 
-	path := make([]MessageEntry, 0, len(entries))
-	current := leaf
-	for current != nil {
-		path = append(path, current)
+	// Walk the branch upward (newest first). Once the newest compaction entry
+	// is crossed, nothing older than the entry it names in FirstKeptEntryID is
+	// kept, so the walk stops there instead of draining summarized history.
+	up := make([]MessageEntry, 0, 16)
+	compactionIdx := -1 // newest-first index of the newest compaction entry
+	keepFrom := ""      // its FirstKeptEntryID ("" = nothing kept below it)
+	keptReached := false
+	for current := leaf; ; {
+		up = append(up, current)
+		if compactionIdx < 0 && current.GetType() == EntryCompaction {
+			compactionIdx = len(up) - 1
+			if ce, ok := current.(CompactionEntry); ok {
+				keepFrom = ce.Compaction.FirstKeptEntryID
+			}
+			if keepFrom == "" {
+				break // summary is authoritative; nothing below stays verbatim
+			}
+		}
+		if keepFrom != "" && current.GetID() == keepFrom {
+			keptReached = true
+			break
+		}
 		parentID := current.GetParent()
 		if parentID == nil {
 			break
@@ -384,45 +405,20 @@ func buildSessionContext(
 		}
 		current = next
 	}
-	slices.Reverse(path)
 
-	var (
-		messages      []MessageEntry
-		compactionIdx = -1
-	)
-	for i, m := range path {
-		if m.GetType() == EntryCompaction {
-			compactionIdx = i
-		}
-	}
-
-	appendMessage := func(entry MessageEntry) {
-		if entry.GetType() == EntryMessage {
-			messages = append(messages, entry)
-		}
-	}
-
+	messages := make([]MessageEntry, 0, len(up))
 	if compactionIdx >= 0 {
-		compaction := path[compactionIdx]
-		messages = append(messages, compaction)
-
-		firstKeptIdx := compactionIdx
-		if ce, ok := compaction.(CompactionEntry); ok && ce.Compaction.FirstKeptEntryID != "" {
-			for i := compactionIdx; i >= 0; i-- {
-				if path[i].GetID() == ce.Compaction.FirstKeptEntryID {
-					firstKeptIdx = i
-					break
-				}
-			}
+		messages = append(messages, up[compactionIdx]) // summary first
+	}
+	start := len(up) - 1
+	if compactionIdx >= 0 && !keptReached {
+		start = compactionIdx - 1 // dangling FirstKeptEntryID: keep nothing below
+	}
+	for i := start; i >= 0; i-- {
+		if i == compactionIdx || up[i].GetType() != EntryMessage {
+			continue
 		}
-
-		for i := firstKeptIdx; i < len(path); i++ {
-			appendMessage(path[i])
-		}
-	} else {
-		for _, entry := range path {
-			appendMessage(entry)
-		}
+		messages = append(messages, up[i])
 	}
 	return messages
 }
