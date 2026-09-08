@@ -12,6 +12,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- Agent: when every tool call in a turn targets a read-only tool
+  (`Definition.Readable` — read/grep/ls/find), the calls now execute
+  concurrently; results keep call order, and any write-capable call in the
+  batch falls back to sequential execution.
+
 ### Deprecated
 
 ### Removed
