@@ -2,6 +2,7 @@
 package editor
 
 import (
+	"runtime"
 	"time"
 
 	"github.com/pulseaiclub/xui"
@@ -18,6 +19,7 @@ import (
 	"github.com/pulseaiclub/phi/internal/tui/pathutil"
 	"github.com/pulseaiclub/phi/internal/tui/submit"
 	"github.com/pulseaiclub/phi/internal/tui/transcript"
+	"github.com/pulseaiclub/phi/internal/util/clipboard"
 	"github.com/pulseaiclub/phi/internal/util/update"
 	"github.com/pulseaiclub/phi/internal/version"
 )
@@ -109,6 +111,9 @@ func NewEditor(
 	e.transcript.SetCopyHandlers(
 		e.bus,
 		func(text string) bool {
+			if runtime.GOOS == "windows" {
+				return clipboard.CopyText(text) == nil
+			}
 			return e.vx != nil && e.vx.CopyToClipboard(text) == nil
 		},
 	)

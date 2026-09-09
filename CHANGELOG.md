@@ -23,6 +23,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   response frame now resolve to the response frame instead of the first
   parseable frame, which previously made `tools/call` return an empty
   result when a server streams log frames before answering.
+- Preserve Unicode when copying TUI text to the Windows clipboard.
 
 ### Security
 
