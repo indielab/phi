@@ -484,9 +484,7 @@ func (c *EngineController) SetModel(name string) error {
 	if _, _, err := c.ReloadExtensions(); err != nil {
 		debuglog.Logf("extension: reload on SetModel: %v", err)
 	}
-	if err := c.engine.SetModel(cfg); err != nil {
-		return err
-	}
+	c.engine.SetModel(cfg)
 	c.modelCfg = cfg
 	return nil
 }

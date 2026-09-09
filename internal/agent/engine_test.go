@@ -86,7 +86,7 @@ func countingTool(runs *atomic.Int32) tools.Tool {
 	}
 }
 
-func newRoundTestEngine(t *testing.T, serverURL string, runs *atomic.Int32) *Engine {
+func newRoundTestEngine(t *testing.T, serverURL string, runs *atomic.Int32, maxRounds int) *Engine {
 	t.Helper()
 	sess, err := NewSession(WithCwd(t.TempDir()))
 	require.NoError(t, err)
@@ -95,6 +95,7 @@ func newRoundTestEngine(t *testing.T, serverURL string, runs *atomic.Int32) *Eng
 		sess,
 		WithGate(permission.AllowAll{}),
 		WithTools([]tools.Tool{countingTool(runs)}),
+		WithMaxRounds(maxRounds),
 	)
 	require.NoError(t, err)
 	return engine
@@ -105,8 +106,7 @@ func TestLoopMaxRoundsAllowsFinalAnswerAfterLastToolRound(t *testing.T) {
 	defer server.Close()
 
 	var runs atomic.Int32
-	engine := newRoundTestEngine(t, server.URL, &runs)
-	require.NoError(t, engine.SetMaxRounds(2))
+	engine := newRoundTestEngine(t, server.URL, &runs, 2)
 
 	var lastErr error
 	var finalText string
@@ -130,8 +130,7 @@ func TestLoopMaxRoundsDoesNotExecuteExtraToolRound(t *testing.T) {
 	defer server.Close()
 
 	var runs atomic.Int32
-	engine := newRoundTestEngine(t, server.URL, &runs)
-	require.NoError(t, engine.SetMaxRounds(2))
+	engine := newRoundTestEngine(t, server.URL, &runs, 2)
 
 	var lastErr error
 	for ev, err := range engine.Loop(t.Context(), "go", LoopOpts{}) {
@@ -168,13 +167,13 @@ func TestLoopContinueAskGrantsAnotherBudget(t *testing.T) {
 		llm.ModelConfig{Name: "fake", BaseURL: server.URL, APIKey: "x"},
 		sess,
 		WithGate(permission.AllowAll{}),
+		WithMaxRounds(1),
 		WithContinueAsk(func(context.Context, int) (bool, error) {
 			// Approve once so the loop can start a second budget window, then stop.
 			return asks.Add(1) == 1, nil
 		}),
 	)
 	require.NoError(t, err)
-	require.NoError(t, engine.SetMaxRounds(1))
 
 	var lastErr error
 	for ev, err := range engine.Loop(t.Context(), "go", LoopOpts{}) {
@@ -199,12 +198,12 @@ func TestLoopContinueAskDeclineReturnsErrMaxRounds(t *testing.T) {
 		llm.ModelConfig{Name: "fake", BaseURL: server.URL, APIKey: "x"},
 		sess,
 		WithGate(permission.AllowAll{}),
+		WithMaxRounds(1),
 		WithContinueAsk(func(context.Context, int) (bool, error) {
 			return false, nil
 		}),
 	)
 	require.NoError(t, err)
-	require.NoError(t, engine.SetMaxRounds(1))
 
 	var lastErr error
 	for ev, err := range engine.Loop(t.Context(), "go", LoopOpts{}) {
@@ -215,18 +214,4 @@ func TestLoopContinueAskDeclineReturnsErrMaxRounds(t *testing.T) {
 		}
 	}
 	require.ErrorIs(t, lastErr, ErrMaxRounds)
-}
-
-func TestSetMaxRoundsRejectsNonPositive(t *testing.T) {
-	sess, err := NewSession(WithCwd(t.TempDir()))
-	require.NoError(t, err)
-	engine, err := NewEngine(
-		llm.ModelConfig{Name: "fake", BaseURL: "http://unused", APIKey: "x"},
-		sess,
-		WithGate(permission.AllowAll{}),
-	)
-	require.NoError(t, err)
-	require.Error(t, engine.SetMaxRounds(0))
-	require.Error(t, engine.SetMaxRounds(-1))
-	require.NoError(t, engine.SetMaxRounds(1))
 }
