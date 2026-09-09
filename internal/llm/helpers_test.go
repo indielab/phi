@@ -8,7 +8,7 @@ import (
 
 func TestMarshalToolParams(t *testing.T) {
 	assert.Equal(t, `{}`, string(MarshalToolParams(nil, "{}")))
-	assert.Equal(t, `{"type":"object"}`, string(MarshalToolParams(nil, `{"type":"object"}`)))
+	assert.JSONEq(t, `{"type":"object"}`, string(MarshalToolParams(nil, `{"type":"object"}`)))
 	raw := MarshalToolParams(&FunctionParameters{Type: "object", Properties: Object{}}, "{}")
 	assert.Contains(t, string(raw), `"type":"object"`)
 }
