@@ -65,7 +65,16 @@ type bashDoc struct {
 }
 
 type agentsDoc struct {
-	Enabled bool `yaml:"enabled" json:"enabled"`
+	// Enabled is a pointer so omitting the key in YAML/JSON keeps default-on
+	// when only agents.models is set.
+	Enabled *bool            `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Models  *agentsModelsDoc `yaml:"models,omitempty"  json:"models,omitempty"`
+}
+
+type agentsModelsDoc struct {
+	Explore string `yaml:"explore,omitempty" json:"explore,omitempty"`
+	Review  string `yaml:"review,omitempty"  json:"review,omitempty"`
+	Worker  string `yaml:"worker,omitempty"  json:"worker,omitempty"`
 }
 
 type modelListRequest struct {

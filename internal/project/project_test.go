@@ -189,6 +189,64 @@ agents:
 	assert.False(t, p.Config().Agents.Enabled)
 }
 
+func TestLoadConfigAgentsModelsOmitsEnabledKeepsDefaultOn(t *testing.T) {
+	p := discoverInTempHome(t)
+	require.NoError(t, os.WriteFile(p.Global().ConfigFile(), []byte(`
+models:
+  - name: m
+    api_key: k
+agents:
+  models:
+    explore: m
+`), 0o644))
+
+	require.NoError(t, p.LoadConfig())
+	assert.True(t, p.Config().Agents.Enabled)
+	assert.Equal(t, "m", p.Config().Agents.Models.Explore)
+}
+
+func TestLoadConfigAgentsRoleModels(t *testing.T) {
+	p := discoverInTempHome(t)
+	require.NoError(t, os.WriteFile(p.Global().ConfigFile(), []byte(`
+models:
+  - name: parent
+    api_key: k
+    default: true
+  - name: cheap
+    api_key: k
+  - name: strong
+    api_key: k
+agents:
+  enabled: true
+  models:
+    explore: cheap
+    review: strong
+`), 0o644))
+
+	require.NoError(t, p.LoadConfig())
+	cfg := p.Config()
+	assert.Equal(t, "cheap", cfg.Agents.Models.Explore)
+	assert.Equal(t, "strong", cfg.Agents.Models.Review)
+	assert.Empty(t, cfg.Agents.Models.Worker)
+}
+
+func TestLoadConfigAgentsRoleModelUnknownKept(t *testing.T) {
+	p := discoverInTempHome(t)
+	require.NoError(t, os.WriteFile(p.Global().ConfigFile(), []byte(`
+models:
+  - name: parent
+    api_key: k
+agents:
+  models:
+    explore: missing-model
+`), 0o644))
+
+	require.NoError(t, p.LoadConfig())
+	assert.Equal(t, "missing-model", p.Config().Agents.Models.Explore)
+	_, ok := p.Config().FindModel("missing-model")
+	assert.False(t, ok)
+}
+
 func TestLoadConfigScalarOrInlineListForms(t *testing.T) {
 	// The old line scanner only understood block lists (and treated an inline
 	// sequence as one literal string); real YAML handles scalar and flow forms.
