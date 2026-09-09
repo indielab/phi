@@ -39,20 +39,18 @@ type ContinueFunc func(ctx context.Context, maxRounds int) (bool, error)
 // and yields session.Event for the TUI reducer. Context compaction is owned
 // here so Session stays a thin message store.
 type Engine struct {
-	client        *llmclient.Client
-	executor      *Executor
-	maxRounds     int
-	skillPath     string
-	contextWindow int
-	modelCfg      llm.ModelConfig
-	gate          permission.Gate
-	ask           permission.AskFunc
-	continueAsk   ContinueFunc
-	jobs          *job.Manager
-	extensions    *extension.Runner // nil = disabled; all methods are nil-safe no-ops
-	baseTools     []tools.Tool      // nil = DefaultTools; preserved across rebind
-	omitExtTools  bool              // sub-agents: emit events but skip RegisterTool merge
-	mcp           *mcp.Pool
+	client       *llmclient.Client
+	executor     *Executor
+	maxRounds    int
+	modelCfg     llm.ModelConfig
+	gate         permission.Gate
+	ask          permission.AskFunc
+	continueAsk  ContinueFunc
+	jobs         *job.Manager
+	extensions   *extension.Runner // nil = disabled; all methods are nil-safe no-ops
+	baseTools    []tools.Tool      // nil = DefaultTools; preserved across rebind
+	omitExtTools bool              // sub-agents: emit events but skip RegisterTool merge
+	mcp          *mcp.Pool
 
 	session *Session
 }
@@ -67,18 +65,16 @@ func NewEngine(model llm.ModelConfig, sess *Session, opts ...EngineOption) (*Eng
 		opt(&cfg)
 	}
 	engine := &Engine{
-		maxRounds:     defaultMaxToolRounds,
-		skillPath:     model.SkillPath,
-		contextWindow: model.ContextWindow,
-		modelCfg:      model,
-		session:       sess,
-		gate:          cfg.gate,
-		ask:           cfg.ask,
-		continueAsk:   cfg.continueAsk,
-		jobs:          cfg.jobs,
-		extensions:    cfg.extensions,
-		omitExtTools:  cfg.omitExtTools,
-		mcp:           cfg.mcp,
+		maxRounds:    defaultMaxToolRounds,
+		modelCfg:     model,
+		session:      sess,
+		gate:         cfg.gate,
+		ask:          cfg.ask,
+		continueAsk:  cfg.continueAsk,
+		jobs:         cfg.jobs,
+		extensions:   cfg.extensions,
+		omitExtTools: cfg.omitExtTools,
+		mcp:          cfg.mcp,
 	}
 	if cfg.maxRounds > 0 {
 		engine.maxRounds = cfg.maxRounds
@@ -136,12 +132,9 @@ func (engine *Engine) buildCoreTools(base []tools.Tool) []tools.Tool {
 
 // SetModel replaces the LLM client and model-related settings without
 // discarding the session tree. Agent tools remain registered when Jobs is set.
-func (engine *Engine) SetModel(cfg llm.ModelConfig) error {
+func (engine *Engine) SetModel(cfg llm.ModelConfig) {
 	engine.modelCfg = cfg
-	engine.skillPath = cfg.SkillPath
-	engine.contextWindow = cfg.ContextWindow
 	engine.rebindTools()
-	return nil
 }
 
 // SetJobs attaches or detaches the job manager and rebuilds the tool list.
@@ -174,7 +167,7 @@ func (engine *Engine) systemPrompt() string {
 	if engine.jobs != nil {
 		maxConcurrent = engine.jobs.MaxConcurrent()
 	}
-	return prompt.Build(engine.skillPath, engine.jobs != nil, maxConcurrent, mcpServers)
+	return prompt.Build(engine.modelCfg.SkillPath, engine.jobs != nil, maxConcurrent, mcpServers)
 }
 
 func (engine *Engine) bindExecutor(registry tools.Registry) {
@@ -189,27 +182,6 @@ func (engine *Engine) HasTool(name string) bool {
 	}
 	_, ok := engine.executor.registry[name]
 	return ok
-}
-
-// Jobs returns the process-level job manager, if any.
-func (engine *Engine) Jobs() *job.Manager {
-	if engine == nil {
-		return nil
-	}
-	return engine.jobs
-}
-
-// SetMaxRounds bounds the number of tool rounds per Loop call.
-// Non-positive values are rejected.
-func (engine *Engine) SetMaxRounds(n int) error {
-	if engine == nil {
-		return nil
-	}
-	if n <= 0 {
-		return fmt.Errorf("agent: max rounds must be positive (got %d)", n)
-	}
-	engine.maxRounds = n
-	return nil
 }
 
 // SetPermission updates the gate and ask handler used by the tool executor.
@@ -244,14 +216,6 @@ func (engine *Engine) SetExtensions(r *extension.Runner) {
 	engine.rebindTools()
 }
 
-// Extensions returns the current extension runner, if any.
-func (engine *Engine) Extensions() *extension.Runner {
-	if engine == nil {
-		return nil
-	}
-	return engine.extensions
-}
-
 // SessionID returns the durable session id.
 func (engine *Engine) SessionID() string {
 	if engine == nil || engine.session == nil {
@@ -274,18 +238,6 @@ func (engine *Engine) SessionCwd() string {
 		return ""
 	}
 	return engine.session.Cwd()
-}
-
-// ReplaceSession swaps the session store (used by /resume).
-func (engine *Engine) ReplaceSession(sess *Session) error {
-	if sess == nil {
-		return errors.New("agent: session is required")
-	}
-	engine.session = sess
-	if engine.executor != nil {
-		engine.executor.SetMeta(sess.ID(), sess.Cwd())
-	}
-	return nil
 }
 
 // Session returns the underlying session wrapper (for UI transcript replay).
@@ -318,7 +270,7 @@ func (engine *Engine) Loop(ctx context.Context, prompt string, opts LoopOpts) it
 		if handled {
 			return
 		}
-		if instr := pendingSkillsInstruction(engine.skillPath, opts.PendingSkills); instr != "" {
+		if instr := pendingSkillsInstruction(engine.modelCfg.SkillPath, opts.PendingSkills); instr != "" {
 			if content == "" {
 				content = instr
 			} else {
@@ -428,25 +380,13 @@ func (engine *Engine) Loop(ctx context.Context, prompt string, opts LoopOpts) it
 	}
 }
 
-// RunUntil is the reserved interface for task 007 (eval / until-goal): it
-// will run Loop repeatedly against a verifier until a goal predicate passes,
-// the budget is exhausted, or ctx is cancelled. Intentionally unimplemented
-// here — the verifier contract does not exist until the eval suite lands.
-//
-// Suggested shape (final signature TBD in 007):
-//
-//	func (engine *Engine) RunUntil(
-//		ctx context.Context,
-//		goal func(snapshot) bool,
-//		maxAttempts int,
-//	) (bool, error)
 func (engine *Engine) maybeCompact(
 	ctx context.Context,
 	yield func(session.Event, error) bool,
 	usage int,
 ) error {
 	settings := compaction.DefaultSettings()
-	if engine.client == nil || !compaction.ShouldCompact(usage, engine.contextWindow, settings) {
+	if engine.client == nil || !compaction.ShouldCompact(usage, engine.modelCfg.ContextWindow, settings) {
 		return nil
 	}
 	prep, err := compaction.PrepareCompact(engine.session.PathEntries(), settings)

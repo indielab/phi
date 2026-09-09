@@ -75,6 +75,9 @@ func runHeadless(opts runOptions) error {
 		agent.WithExtensions(extRunner),
 		agent.WithTools(opts.builtinTools),
 	}
+	if opts.maxRounds > 0 {
+		engineOpts = append(engineOpts, agent.WithMaxRounds(opts.maxRounds))
+	}
 	if pool, err := mcp.LoadPool(bs.Proj.MCPConfigFile()); err != nil {
 		fmt.Fprintln(os.Stderr, "warning: mcp:", err)
 	} else if pool != nil {
@@ -113,12 +116,6 @@ func runHeadless(opts runOptions) error {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "phi run:", err)
 		return exitCode(ExitUsage)
-	}
-	if opts.maxRounds > 0 {
-		if err := engine.SetMaxRounds(opts.maxRounds); err != nil {
-			fmt.Fprintln(os.Stderr, "phi run:", err)
-			return exitCode(ExitUsage)
-		}
 	}
 
 	fmt.Fprintf(os.Stderr, "session: %s\n", engine.SessionID())
