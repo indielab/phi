@@ -10,6 +10,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+<!-- Released section -->
+<!-- Don't change this section unless doing release -->
+
+## [0.25.0] - 2026-09-09
+
+### Added
+
 - Sub-agents: optional per-role model defaults in `agents.models` (`explore` /
   `review` / `worker`). Palette: settings → agents → models → role → model
   (session-only; `(inherit parent)` clears). Omitted roles inherit the parent
@@ -32,9 +49,6 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `agents.models` set) no longer decodes as false; default stays on. (`project`)
 
 ### Security
-
-<!-- Released section -->
-<!-- Don't change this section unless doing release -->
 
 ## [0.24.0] - 2026-09-08
 
@@ -416,7 +430,8 @@ Earlier releases are available from GitHub tags only.
 
 <!-- Released section ended -->
 
-[Unreleased]: https://github.com/pulseaiclub/phi/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/pulseaiclub/phi/compare/v0.24.0...HEAD
+[0.25.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.25.0
 [0.24.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.24.0
 [0.23.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.23.0
 [0.22.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.22.0
