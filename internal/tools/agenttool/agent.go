@@ -18,18 +18,17 @@ const agentSummaryLimit = 12000 // bytes, keep parent context small
 
 const agentLaunchGuidance = `Launch a specialized sub-agent. Pick a role:
 
-- explore (default): read-only search/structure (tools: bash, read, grep, ls, find). Use when a keyword/file search is uncertain or would take many find/grep rounds.
-- review: read-only + bash for diffs/checks — report findings, do not edit.
-- worker: may read and write — only after you have planned an independent change block; do not use for open-ended exploration.
+- explore (default): no write/edit; full bash except hard denies. Multi-hop recon / unknown location — keep tool noise out of this context.
+- review: same tools as explore; diffs, checks, quality/security report — do not edit.
+- worker: read/write/edit + bash; implement a scoped, self-contained change and verify. Not for open-ended exploration.
 
 When NOT to use any sub-agent:
-- You already know the exact file path — use read yourself
+- Exact file path already known — use read yourself
 - Exact symbol like "class Foo" — use grep yourself
-- Small local edit — edit/write yourself
-- Prefer explore over worker unless the task is explicitly to implement a scoped change
+- Tiny local edit — edit/write yourself
 
 How to use:
-1. Use agent_spawn to launch a job, then agent_wait to block for its summary. For parallel jobs, spawn all first, then wait each.
+1. Use agent_spawn to launch a job, then agent_wait for its summary. For parallel jobs, spawn all first, then wait each.
 2. Stateless: put a highly detailed, self-contained prompt and say what the final summary must include.
 3. You only receive the final summary. Summarize for the user if needed.
 4. Sub-agents cannot spawn further agents. Do not put secrets in the prompt.

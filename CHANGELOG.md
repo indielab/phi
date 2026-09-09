@@ -12,6 +12,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- Sub-agents: child gates use `BashDefault=Allow` (hard deny list still applies), so explore/review/worker can run non-allowlisted shell (`make`, pipelines, tests) without Ask→Deny folding. Role hints and parent spawn guidance emphasize task contracts (recon / review report / scoped implement) rather than allowlisted bash. Hard deny now also blocks piping into `sh`/`bash`.
+
 ### Deprecated
 
 ### Removed

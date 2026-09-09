@@ -51,9 +51,7 @@ func (r EngineRunner) Run(ctx context.Context, env job.RunEnv) (string, error) {
 
 	gate := r.Gate
 	if gate == nil {
-		policy := permission.DefaultPolicy()
-		policy.Mode = spec.Mode
-		g, err := permission.NewGate(policy, cwd)
+		g, err := permission.NewGate(permission.ChildPolicy(spec.Mode), cwd)
 		if err != nil {
 			return "", err
 		}

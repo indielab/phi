@@ -433,11 +433,11 @@ Sub-agents themselves use a **role** (`explore` default | `review` | `worker`):
 
 | Role | Tools | Use for |
 |------|--------|---------|
-| `explore` | read-only (+ allowlisted bash) | Search / map structure |
-| `review` | read-only (+ allowlisted bash) | Diffs / checks; no edits |
-| `worker` | full tools except nesting | Planned, independent edits |
+| `explore` | no write/edit; bash except hard denies | Multi-hop recon / map structure |
+| `review` | same as explore | Diffs / checks; report only |
+| `worker` | full tools except nesting; bash except hard denies | Scoped, self-contained edits |
 
-Default stays explore (read-only). Prefer worker only after the parent has a concrete plan.
+Default stays explore (no edits). Prefer worker when the task is to implement a scoped change in an isolated context.
 
 ## Tools
 
