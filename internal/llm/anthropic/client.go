@@ -46,7 +46,7 @@ func BuildRequest(
 	messages []llm.Message,
 	tools []llm.ToolDefinition,
 ) AnthropicRequest {
-	cc := resolveCacheControl()
+	cc := &cacheControl{Type: "ephemeral", TTL: "1h"}
 
 	req := AnthropicRequest{
 		Model:     cfg.Name,
@@ -167,14 +167,10 @@ func BuildRequest(
 	}
 
 	for i, t := range tools {
-		params, _ := json.Marshal(t.Params)
-		if len(params) == 0 || bytes.Equal(bytes.TrimSpace(params), []byte("null")) {
-			params = json.RawMessage("{}")
-		}
 		tool := anthropicTool{
 			Name:        t.Name,
 			Description: t.Description,
-			InputSchema: params,
+			InputSchema: llm.MarshalToolParams(t.Params, "{}"),
 		}
 		if i == len(tools)-1 {
 			tool.CacheControl = cc
@@ -208,6 +204,25 @@ func toolUseInput(arguments string) json.RawMessage {
 	return encoded
 }
 
+func newMessagesHTTPRequest(ctx context.Context, cfg llm.ModelConfig, body []byte, stream bool) (*http.Request, error) {
+	httpReq, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		normalizeBaseURL(cfg.BaseURL)+messagesPath,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Api-Key", cfg.APIKey)
+	httpReq.Header.Set("Anthropic-Version", apiVersion)
+	if stream {
+		httpReq.Header.Set("Accept", util.ContentEventStream)
+	}
+	return httpReq, nil
+}
+
 // Stream POSTs a streaming request to the Messages API and yields normalized
 // events (same StreamEvent contract as the OpenAI-compatible path).
 func Stream(
@@ -223,20 +238,11 @@ func Stream(
 			return
 		}
 
-		httpReq, err := http.NewRequestWithContext(
-			ctx,
-			http.MethodPost,
-			normalizeBaseURL(cfg.BaseURL)+messagesPath,
-			bytes.NewReader(body),
-		)
+		httpReq, err := newMessagesHTTPRequest(ctx, cfg, body, true)
 		if err != nil {
 			yield(llm.StreamEvent{}, err)
 			return
 		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("X-Api-Key", cfg.APIKey)
-		httpReq.Header.Set("Anthropic-Version", apiVersion)
-		httpReq.Header.Set("Accept", util.ContentEventStream)
 
 		httpResp, err := util.DoWithRetry(httpClient, httpReq)
 		if err != nil {
@@ -417,18 +423,7 @@ func processStream(body io.Reader, yield func(llm.StreamEvent, error) bool) {
 	}
 
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
-	out := llm.Response{
-		Choices: []llm.Choice{{
-			Message: llm.Message{
-				Role:             llm.RoleAssistant,
-				Content:          content.String(),
-				ReasoningContent: reasoning.String(),
-				ToolCalls:        toolCalls,
-			},
-		}},
-		Usage: usage,
-	}
-	yield(llm.StreamEvent{Type: llm.StreamEventTypeDone, Partial: out}, nil)
+	yield(llm.AssistantDone(content.String(), reasoning.String(), toolCalls, usage), nil)
 }
 
 // Compact sends a single non-streaming request and returns the assistant
@@ -445,18 +440,10 @@ func Compact(ctx context.Context, httpClient *http.Client, cfg llm.ModelConfig, 
 		return "", err
 	}
 
-	httpReq, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		normalizeBaseURL(cfg.BaseURL)+messagesPath,
-		bytes.NewReader(body),
-	)
+	httpReq, err := newMessagesHTTPRequest(ctx, cfg, body, false)
 	if err != nil {
 		return "", err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("X-Api-Key", cfg.APIKey)
-	httpReq.Header.Set("Anthropic-Version", apiVersion)
 
 	httpResp, err := util.DoWithRetry(httpClient, httpReq)
 	if err != nil {
