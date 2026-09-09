@@ -53,10 +53,3 @@ type anthropicContentBlock struct {
 	Source       *anthropicImageSource `json:"source,omitempty"`
 	CacheControl *cacheControl         `json:"cache_control,omitempty"`
 }
-
-func resolveCacheControl() *cacheControl {
-	return &cacheControl{
-		Type: "ephemeral",
-		TTL:  "1h",
-	}
-}

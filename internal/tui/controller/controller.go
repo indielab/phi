@@ -42,6 +42,9 @@ type EngineController struct {
 	sessionDir string
 	cwd        string
 	modelCfg   llm.ModelConfig
+	// roleModels maps sub-agent role → configured model name for this session.
+	// Empty / missing → inherit modelCfg. Seeded from config; palette can override.
+	roleModels map[job.Role]string
 	jobs       *job.Manager
 	unsubJobs  func()
 
@@ -85,6 +88,7 @@ func NewController(bus *Bus, proj *project.Project, cwd string) (*EngineControll
 		sessionDir:    proj.SessionDir(),
 		askTimeoutSec: 120,
 		modelCfg:      proj.Config().Model(),
+		roleModels:    make(map[job.Role]string),
 	}
 	// Default: no permission prompts. Toggle via command palette → settings → permissions.
 	c.allowAll.Store(true)
@@ -93,14 +97,21 @@ func NewController(bus *Bus, proj *project.Project, cwd string) (*EngineControll
 
 	c.initGate(config.Permissions)
 	c.agentsEnabled.Store(config.Agents.Enabled)
+	if s := strings.TrimSpace(config.Agents.Models.Explore); s != "" {
+		c.roleModels[job.RoleExplore] = s
+	}
+	if s := strings.TrimSpace(config.Agents.Models.Review); s != "" {
+		c.roleModels[job.RoleReview] = s
+	}
+	if s := strings.TrimSpace(config.Agents.Models.Worker); s != "" {
+		c.roleModels[job.RoleWorker] = s
+	}
 
 	extRunner := loadExtensions(proj)
 	c.extRunner.Store(extRunner)
 	c.bindExtensionHost(extRunner)
 
-	jobs, err := agent.NewJobManager(proj.JobsDir(), c.modelCfg, func() llm.ModelConfig {
-		return c.modelCfg
-	}, c.Extensions)
+	jobs, err := agent.NewJobManager(proj.JobsDir(), c.modelCfg, c.modelForRole, c.Extensions)
 	if err != nil {
 		return nil, err
 	}
@@ -223,6 +234,37 @@ func (c *EngineController) SetAgentsEnabled(v bool) {
 	if c.engine != nil {
 		c.engine.SetJobs(c.engineJobs())
 	}
+}
+
+// modelForRole returns the session override for role, or the parent modelCfg.
+func (c *EngineController) modelForRole(role job.Role) llm.ModelConfig {
+	role = job.NormalizeRole(string(role))
+	if name := c.roleModels[role]; name != "" {
+		if m, ok := c.proj.Config().FindModel(name); ok {
+			return m
+		}
+		debuglog.Logf("agents: unknown role model %q for %s; using parent", name, role)
+	}
+	return c.modelCfg
+}
+
+// SetRoleModel sets the session-only model name for a sub-agent role.
+// Empty name clears the override (inherit parent). Name must exist in config.
+func (c *EngineController) SetRoleModel(role, name string) error {
+	r, err := job.ParseRole(role)
+	if err != nil {
+		return err
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		delete(c.roleModels, r)
+		return nil
+	}
+	if _, ok := c.proj.Config().FindModel(name); !ok {
+		return fmt.Errorf("unknown model %q", name)
+	}
+	c.roleModels[r] = name
+	return nil
 }
 
 // engineJobs returns the job manager only when sub-agents are enabled.
@@ -484,9 +526,7 @@ func (c *EngineController) SetModel(name string) error {
 	if _, _, err := c.ReloadExtensions(); err != nil {
 		debuglog.Logf("extension: reload on SetModel: %v", err)
 	}
-	if err := c.engine.SetModel(cfg); err != nil {
-		return err
-	}
+	c.engine.SetModel(cfg)
 	c.modelCfg = cfg
 	return nil
 }

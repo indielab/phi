@@ -39,20 +39,18 @@ type ContinueFunc func(ctx context.Context, maxRounds int) (bool, error)
 // and yields session.Event for the TUI reducer. Context compaction is owned
 // here so Session stays a thin message store.
 type Engine struct {
-	client        *llmclient.Client
-	executor      *Executor
-	maxRounds     int
-	skillPath     string
-	contextWindow int
-	modelCfg      llm.ModelConfig
-	gate          permission.Gate
-	ask           permission.AskFunc
-	continueAsk   ContinueFunc
-	jobs          *job.Manager
-	extensions    *extension.Runner // nil = disabled; all methods are nil-safe no-ops
-	baseTools     []tools.Tool      // nil = DefaultTools; preserved across rebind
-	omitExtTools  bool              // sub-agents: emit events but skip RegisterTool merge
-	mcp           *mcp.Pool
+	client       *llmclient.Client
+	executor     *Executor
+	maxRounds    int
+	modelCfg     llm.ModelConfig
+	gate         permission.Gate
+	ask          permission.AskFunc
+	continueAsk  ContinueFunc
+	jobs         *job.Manager
+	extensions   *extension.Runner // nil = disabled; all methods are nil-safe no-ops
+	baseTools    []tools.Tool      // nil = DefaultTools; preserved across rebind
+	omitExtTools bool              // sub-agents: emit events but skip RegisterTool merge
+	mcp          *mcp.Pool
 
 	session *Session
 }
@@ -67,18 +65,16 @@ func NewEngine(model llm.ModelConfig, sess *Session, opts ...EngineOption) (*Eng
 		opt(&cfg)
 	}
 	engine := &Engine{
-		maxRounds:     defaultMaxToolRounds,
-		skillPath:     model.SkillPath,
-		contextWindow: model.ContextWindow,
-		modelCfg:      model,
-		session:       sess,
-		gate:          cfg.gate,
-		ask:           cfg.ask,
-		continueAsk:   cfg.continueAsk,
-		jobs:          cfg.jobs,
-		extensions:    cfg.extensions,
-		omitExtTools:  cfg.omitExtTools,
-		mcp:           cfg.mcp,
+		maxRounds:    defaultMaxToolRounds,
+		modelCfg:     model,
+		session:      sess,
+		gate:         cfg.gate,
+		ask:          cfg.ask,
+		continueAsk:  cfg.continueAsk,
+		jobs:         cfg.jobs,
+		extensions:   cfg.extensions,
+		omitExtTools: cfg.omitExtTools,
+		mcp:          cfg.mcp,
 	}
 	if cfg.maxRounds > 0 {
 		engine.maxRounds = cfg.maxRounds
@@ -136,12 +132,9 @@ func (engine *Engine) buildCoreTools(base []tools.Tool) []tools.Tool {
 
 // SetModel replaces the LLM client and model-related settings without
 // discarding the session tree. Agent tools remain registered when Jobs is set.
-func (engine *Engine) SetModel(cfg llm.ModelConfig) error {
+func (engine *Engine) SetModel(cfg llm.ModelConfig) {
 	engine.modelCfg = cfg
-	engine.skillPath = cfg.SkillPath
-	engine.contextWindow = cfg.ContextWindow
 	engine.rebindTools()
-	return nil
 }
 
 // SetJobs attaches or detaches the job manager and rebuilds the tool list.
@@ -174,7 +167,7 @@ func (engine *Engine) systemPrompt() string {
 	if engine.jobs != nil {
 		maxConcurrent = engine.jobs.MaxConcurrent()
 	}
-	return prompt.Build(engine.skillPath, engine.jobs != nil, maxConcurrent, mcpServers)
+	return prompt.Build(engine.modelCfg.SkillPath, engine.jobs != nil, maxConcurrent, mcpServers)
 }
 
 func (engine *Engine) bindExecutor(registry tools.Registry) {
@@ -189,27 +182,6 @@ func (engine *Engine) HasTool(name string) bool {
 	}
 	_, ok := engine.executor.registry[name]
 	return ok
-}
-
-// Jobs returns the process-level job manager, if any.
-func (engine *Engine) Jobs() *job.Manager {
-	if engine == nil {
-		return nil
-	}
-	return engine.jobs
-}
-
-// SetMaxRounds bounds the number of tool rounds per Loop call.
-// Non-positive values are rejected.
-func (engine *Engine) SetMaxRounds(n int) error {
-	if engine == nil {
-		return nil
-	}
-	if n <= 0 {
-		return fmt.Errorf("agent: max rounds must be positive (got %d)", n)
-	}
-	engine.maxRounds = n
-	return nil
 }
 
 // SetPermission updates the gate and ask handler used by the tool executor.
@@ -244,14 +216,6 @@ func (engine *Engine) SetExtensions(r *extension.Runner) {
 	engine.rebindTools()
 }
 
-// Extensions returns the current extension runner, if any.
-func (engine *Engine) Extensions() *extension.Runner {
-	if engine == nil {
-		return nil
-	}
-	return engine.extensions
-}
-
 // SessionID returns the durable session id.
 func (engine *Engine) SessionID() string {
 	if engine == nil || engine.session == nil {
@@ -276,18 +240,6 @@ func (engine *Engine) SessionCwd() string {
 	return engine.session.Cwd()
 }
 
-// ReplaceSession swaps the session store (used by /resume).
-func (engine *Engine) ReplaceSession(sess *Session) error {
-	if sess == nil {
-		return errors.New("agent: session is required")
-	}
-	engine.session = sess
-	if engine.executor != nil {
-		engine.executor.SetMeta(sess.ID(), sess.Cwd())
-	}
-	return nil
-}
-
 // Session returns the underlying session wrapper (for UI transcript replay).
 func (engine *Engine) Session() *Session {
 	if engine == nil {
@@ -308,8 +260,11 @@ type LoopOpts struct {
 // Loop appends the user prompt and runs inference + tool rounds until the
 // model stops calling tools or the context is cancelled.
 //
-// Compaction: persist the turn first, then check usage after
-// the agent turn ends (final assistant with no tool_calls) — never mid-tool-loop.
+// Compaction runs in two places:
+//  1. After a finished turn (final assistant with no tool_calls), when usage
+//     crosses the context-window threshold.
+//  2. Mid-loop on a context-overflow API error: force-compact once, rebuild
+//     context, and retry the stream. A second overflow fails closed.
 func (engine *Engine) Loop(ctx context.Context, prompt string, opts LoopOpts) iter.Seq2[session.Event, error] {
 	return func(yield func(session.Event, error) bool) {
 		// The extension runner is nil-safe (nil = disabled), so calls are
@@ -318,7 +273,7 @@ func (engine *Engine) Loop(ctx context.Context, prompt string, opts LoopOpts) it
 		if handled {
 			return
 		}
-		if instr := pendingSkillsInstruction(engine.skillPath, opts.PendingSkills); instr != "" {
+		if instr := pendingSkillsInstruction(engine.modelCfg.SkillPath, opts.PendingSkills); instr != "" {
 			if content == "" {
 				content = instr
 			} else {
@@ -342,6 +297,7 @@ func (engine *Engine) Loop(ctx context.Context, prompt string, opts LoopOpts) it
 		}
 
 		toolRounds := 0
+		overflowRecovered := false
 		for {
 			if ctx.Err() != nil {
 				return
@@ -351,8 +307,20 @@ func (engine *Engine) Loop(ctx context.Context, prompt string, opts LoopOpts) it
 
 			msgs := engine.session.BuildContext()
 
-			msg, completeEvent, ok := engine.streamTurn(ctx, yield, msgs)
-			if !ok {
+			msg, completeEvent, err := engine.streamTurn(ctx, yield, msgs)
+			if err != nil {
+				if !overflowRecovered && llm.IsContextOverflow(err) {
+					did, cerr := engine.runCompact(ctx, yield, 0, true)
+					if cerr == nil && did {
+						overflowRecovered = true
+						continue
+					}
+				}
+				yield(nil, err)
+				return
+			}
+			if completeEvent == nil {
+				// Cancelled or consumer stopped — no error to surface.
 				return
 			}
 
@@ -364,9 +332,9 @@ func (engine *Engine) Loop(ctx context.Context, prompt string, opts LoopOpts) it
 					yield(nil, fmt.Errorf("agent: %w (%d)", ErrMaxRounds, engine.maxRounds))
 					return
 				}
-				ok, err := engine.continueAsk(ctx, engine.maxRounds)
-				if err != nil {
-					yield(nil, err)
+				ok, askErr := engine.continueAsk(ctx, engine.maxRounds)
+				if askErr != nil {
+					yield(nil, askErr)
 					return
 				}
 				if !ok {
@@ -402,7 +370,7 @@ func (engine *Engine) Loop(ctx context.Context, prompt string, opts LoopOpts) it
 					continue
 				}
 				// Turn finished — compact using this assistant's usage.
-				if err := engine.maybeCompact(ctx, yield, msg.Usage.TotalTokens); err != nil {
+				if _, err := engine.runCompact(ctx, yield, msg.Usage.TotalTokens, false); err != nil {
 					yield(nil, err)
 				}
 				return
@@ -428,44 +396,45 @@ func (engine *Engine) Loop(ctx context.Context, prompt string, opts LoopOpts) it
 	}
 }
 
-// RunUntil is the reserved interface for task 007 (eval / until-goal): it
-// will run Loop repeatedly against a verifier until a goal predicate passes,
-// the budget is exhausted, or ctx is cancelled. Intentionally unimplemented
-// here — the verifier contract does not exist until the eval suite lands.
-//
-// Suggested shape (final signature TBD in 007):
-//
-//	func (engine *Engine) RunUntil(
-//		ctx context.Context,
-//		goal func(snapshot) bool,
-//		maxAttempts int,
-//	) (bool, error)
-func (engine *Engine) maybeCompact(
+// runCompact prepares and persists a compaction entry.
+// When force is false, it no-ops unless usage crosses the window threshold.
+// When force is true (overflow recovery), it skips the threshold check but
+// still no-ops when there is nothing useful to summarize (avoids burning the
+// single overflow retry on a no-op compact).
+// did is true only when a compaction entry was appended.
+func (engine *Engine) runCompact(
 	ctx context.Context,
 	yield func(session.Event, error) bool,
 	usage int,
-) error {
+	force bool,
+) (did bool, err error) {
 	settings := compaction.DefaultSettings()
-	if engine.client == nil || !compaction.ShouldCompact(usage, engine.contextWindow, settings) {
-		return nil
+	if engine.client == nil {
+		return false, nil
+	}
+	if !force && !compaction.ShouldCompact(usage, engine.modelCfg.ContextWindow, settings) {
+		return false, nil
 	}
 	prep, err := compaction.PrepareCompact(engine.session.PathEntries(), settings)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if prep.FirstKeptEntryId == "" {
-		return nil
+		return false, nil
+	}
+	if force && len(prep.MessagesToSummarize) == 0 && len(prep.TurnPrefixMessages) == 0 {
+		return false, nil
 	}
 
 	id := fmt.Sprintf("compaction-%d", time.Now().UnixNano())
 	if !yield(session.CompactionStarted{}, nil) {
-		return context.Canceled
+		return false, context.Canceled
 	}
 
 	result, err := compaction.Compact(ctx, *prep, engine.client)
 	if err != nil {
 		_ = yield(session.CompactionComplete{ID: id, Failed: true}, nil)
-		return err
+		return false, err
 	}
 	if err := engine.session.AppendCompaction(session.Compaction{
 		Summary:          result.Summary,
@@ -474,20 +443,25 @@ func (engine *Engine) maybeCompact(
 		Details:          result.Details,
 	}); err != nil {
 		_ = yield(session.CompactionComplete{ID: id, Failed: true}, nil)
-		return err
+		return false, err
 	}
 	if !yield(session.CompactionComplete{ID: id}, nil) {
-		return context.Canceled
+		return false, context.Canceled
 	}
 	engine.extensions.EmitSessionCompact("auto")
-	return nil
+	return true, nil
 }
 
+// streamTurn runs one assistant stream. On success it returns the final
+// message and a StateComplete event (not yet yielded — caller checks tool
+// budget first). On API/stream failure it returns err without yielding it
+// so Loop can attempt overflow recovery. A nil event with nil err means
+// cancel or the consumer stopped receiving.
 func (engine *Engine) streamTurn(
 	ctx context.Context,
 	yield func(session.Event, error) bool,
 	messages []llm.Message,
-) (llm.Message, session.Event, bool) {
+) (llm.Message, session.Event, error) {
 	id := fmt.Sprintf("assistant-%d", time.Now().UnixNano())
 	var thinking, text string
 	var final llm.Message
@@ -498,8 +472,7 @@ func (engine *Engine) streamTurn(
 			if thinking != "" || text != "" {
 				_ = yield(emitMessage(id, session.StateError, session.StopNone, thinking, text, nil, llm.Usage{}), nil)
 			}
-			yield(nil, err)
-			return llm.Message{}, nil, false
+			return llm.Message{}, nil, err
 		}
 
 		switch event.Type {
@@ -508,8 +481,7 @@ func (engine *Engine) streamTurn(
 			if errText == "" {
 				errText = "stream error"
 			}
-			yield(nil, fmt.Errorf("%s", errText))
-			return llm.Message{}, nil, false
+			return llm.Message{}, nil, fmt.Errorf("%s", errText)
 
 		case llm.StreamEventTypeDelta:
 			if event.Delta.ReasoningContent != "" {
@@ -522,13 +494,12 @@ func (engine *Engine) streamTurn(
 				emitMessage(id, session.StateStreaming, session.StopNone, thinking, text, nil, llm.Usage{}),
 				nil,
 			) {
-				return llm.Message{}, nil, false
+				return llm.Message{}, nil, nil
 			}
 
 		case llm.StreamEventTypeDone:
 			if len(event.Partial.Choices) == 0 {
-				yield(nil, errors.New("agent: stream finished with no assistant choice"))
-				return llm.Message{}, nil, false
+				return llm.Message{}, nil, errors.New("agent: stream finished with no assistant choice")
 			}
 			final = event.Partial.Choices[0].Message
 			final.Usage = event.Partial.Usage
@@ -546,10 +517,9 @@ func (engine *Engine) streamTurn(
 	if !gotDone {
 		if ctx.Err() != nil {
 			_ = yield(emitMessage(id, session.StateCancelled, session.StopNone, thinking, text, nil, llm.Usage{}), nil)
-			return llm.Message{}, nil, false
+			return llm.Message{}, nil, nil
 		}
-		yield(nil, errors.New("agent: stream closed without assistant output"))
-		return llm.Message{}, nil, false
+		return llm.Message{}, nil, errors.New("agent: stream closed without assistant output")
 	}
 
 	blocks := engine.toolCallsToBlocks(final.ToolCalls)
@@ -558,7 +528,7 @@ func (engine *Engine) streamTurn(
 		reason = session.StopToolUse
 	}
 	complete := emitMessage(id, session.StateComplete, reason, thinking, text, blocks, final.Usage)
-	return final, complete, true
+	return final, complete, nil
 }
 
 func (engine *Engine) toolCallsToBlocks(calls []llm.ToolCall) []session.ContentBlock {

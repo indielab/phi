@@ -9,13 +9,14 @@ import (
 )
 
 // NewJobManager creates a process-level job manager whose runner drives child Engines.
-// modelFn may be nil; then model is used as a fixed snapshot.
+// modelFn may be nil; then model is used as a fixed snapshot for every role.
+// When set, modelFn receives the job role so callers can pick per-role models.
 // extensionsFn supplies extensions for child engines (may return nil); prefer a live
 // getter so TUI reload updates sub-agents too.
 func NewJobManager(
 	root string,
 	model llm.ModelConfig,
-	modelFn func() llm.ModelConfig,
+	modelFn func(role job.Role) llm.ModelConfig,
 	extensionsFn func() *extension.Runner,
 ) (*job.Manager, error) {
 	if root == "" {

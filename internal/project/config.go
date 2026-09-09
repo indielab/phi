@@ -28,6 +28,16 @@ type Config struct {
 // to keep ordinary sessions lean and avoid loading the extra tool schemas.
 type AgentsConfig struct {
 	Enabled bool // true when absent from config
+	// Models names optional per-role defaults (explore|review|worker).
+	// Empty → inherit the parent session model.
+	Models AgentsRoleModels
+}
+
+// AgentsRoleModels maps sub-agent roles to configured model names.
+type AgentsRoleModels struct {
+	Explore string `yaml:"explore"`
+	Review  string `yaml:"review"`
+	Worker  string `yaml:"worker"`
 }
 
 // Model returns the default model config with the skill path applied, ready
@@ -149,7 +159,16 @@ func parseConfigFile(path string) (*Config, error) {
 		applyPermissions(&cfg.Permissions, raw.Permissions)
 	}
 	if raw.Agents != nil {
-		cfg.Agents.Enabled = raw.Agents.Enabled
+		if raw.Agents.Enabled != nil {
+			cfg.Agents.Enabled = *raw.Agents.Enabled
+		}
+		if raw.Agents.Models != nil {
+			cfg.Agents.Models = AgentsRoleModels{
+				Explore: strings.TrimSpace(raw.Agents.Models.Explore),
+				Review:  strings.TrimSpace(raw.Agents.Models.Review),
+				Worker:  strings.TrimSpace(raw.Agents.Models.Worker),
+			}
+		}
 	}
 	return cfg, nil
 }
@@ -171,7 +190,9 @@ type fileConfig struct {
 }
 
 type agentsConfig struct {
-	Enabled bool `yaml:"enabled"`
+	// Enabled is a pointer so omitting the key keeps the default (on).
+	Enabled *bool             `yaml:"enabled"`
+	Models  *AgentsRoleModels `yaml:"models"`
 }
 
 type modelEntry struct {

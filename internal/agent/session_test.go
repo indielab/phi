@@ -73,18 +73,18 @@ func TestEngineSetModelKeepsSession(t *testing.T) {
 	require.NoError(t, eng.session.Append(llm.Message{Role: llm.RoleAssistant, Content: "ok"}))
 	n := eng.session.Len()
 
-	require.NoError(t, eng.SetModel(llm.ModelConfig{
+	eng.SetModel(llm.ModelConfig{
 		Name:          "model-b",
 		APIKey:        "k",
 		BaseURL:       "http://example",
 		ContextWindow: 8192,
 		SkillPath:     dir,
-	}))
+	})
 	assert.Equal(t, id, eng.SessionID())
 	assert.Equal(t, file, eng.SessionFile())
 	assert.Equal(t, n, eng.session.Len())
-	assert.Equal(t, 8192, eng.contextWindow)
-	assert.Equal(t, dir, eng.skillPath)
+	assert.Equal(t, 8192, eng.modelCfg.ContextWindow)
+	assert.Equal(t, dir, eng.modelCfg.SkillPath)
 }
 
 func splitFirstJSONL(b []byte) []byte {

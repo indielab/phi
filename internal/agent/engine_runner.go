@@ -21,17 +21,18 @@ import (
 // <job.Dir>/session/, ParentID from the job, and no Ask handler.
 // Child engines do not receive Jobs, so they have no agent_* tools.
 // Role (explore|worker|review) selects tools and default permission mode
-// when Gate/Tools are nil.
+// when Gate/Tools are nil. ModelFn (when set) selects the model per role;
+// otherwise Model is used as a fixed snapshot.
 //
 // Extensions (or ExtensionsFn) are inherited from the parent so policy
 // tool_call handlers apply. Extension RegisterTool tools are not merged
 // into child engines. ExtensionsFn wins when set (live reload).
 type EngineRunner struct {
 	Model        llm.ModelConfig
-	ModelFn      func() llm.ModelConfig // if set, preferred over Model
-	Gate         permission.Gate        // nil → SpecForRole(job.Role).Mode on WorkDir
-	Tools        []tools.Tool           // nil → SpecForRole(job.Role).Tools
-	MaxRounds    int                    // 0 → Engine default
+	ModelFn      func(role job.Role) llm.ModelConfig // if set, preferred over Model
+	Gate         permission.Gate                     // nil → SpecForRole(job.Role).Mode on WorkDir
+	Tools        []tools.Tool                        // nil → SpecForRole(job.Role).Tools
+	MaxRounds    int                                 // 0 → Engine default
 	Extensions   *extension.Runner
 	ExtensionsFn func() *extension.Runner
 }
@@ -51,9 +52,7 @@ func (r EngineRunner) Run(ctx context.Context, env job.RunEnv) (string, error) {
 
 	gate := r.Gate
 	if gate == nil {
-		policy := permission.DefaultPolicy()
-		policy.Mode = spec.Mode
-		g, err := permission.NewGate(policy, cwd)
+		g, err := permission.NewGate(permission.ChildPolicy(spec.Mode), cwd)
 		if err != nil {
 			return "", err
 		}
@@ -67,7 +66,7 @@ func (r EngineRunner) Run(ctx context.Context, env job.RunEnv) (string, error) {
 
 	model := r.Model
 	if r.ModelFn != nil {
-		model = r.ModelFn()
+		model = r.ModelFn(env.Job.Role)
 	}
 
 	extRunner := r.Extensions

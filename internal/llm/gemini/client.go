@@ -163,11 +163,11 @@ func lastFunctionResponseContent(contents []content) *content {
 func toToolMessage(tools []llm.ToolDefinition) []functionDeclaration {
 	decls := make([]functionDeclaration, 0, len(tools))
 	for _, t := range tools {
-		params, _ := json.Marshal(t.Params)
-		if len(params) == 0 || bytes.Equal(bytes.TrimSpace(params), []byte("null")) {
-			params = json.RawMessage(`{"type":"object"}`)
-		}
-		decls = append(decls, functionDeclaration{Name: t.Name, Description: t.Description, Parameters: params})
+		decls = append(decls, functionDeclaration{
+			Name:        t.Name,
+			Description: t.Description,
+			Parameters:  llm.MarshalToolParams(t.Params, `{"type":"object"}`),
+		})
 	}
 	return decls
 }
@@ -215,8 +215,11 @@ func getURL(model, baseURL, apiKey string, stream bool) string {
 	return u.String()
 }
 
-func getStreamURL(model, baseURL, apiKey string) string {
-	return getURL(model, baseURL, apiKey, true)
+func setGeminiAuth(req *http.Request, baseURL, apiKey string) {
+	req.Header.Set("Content-Type", "application/json")
+	if apiKey != "" && strings.Contains(strings.ToLower(baseURL), "aiplatform.googleapis.com") {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
 }
 
 func Stream(
@@ -237,17 +240,14 @@ func Stream(
 		httpReq, err := http.NewRequestWithContext(
 			ctx,
 			http.MethodPost,
-			getStreamURL(config.Name, config.BaseURL, config.APIKey), bytes.NewReader(body),
+			getURL(config.Name, config.BaseURL, config.APIKey, true),
+			bytes.NewReader(body),
 		)
 		if err != nil {
 			yield(llm.StreamEvent{}, err)
 			return
 		}
-
-		httpReq.Header.Set("Content-Type", "application/json")
-		if strings.Contains(strings.ToLower(config.BaseURL), "aiplatform.googleapis.com") && config.APIKey != "" {
-			httpReq.Header.Set("Authorization", "Bearer "+config.APIKey)
-		}
+		setGeminiAuth(httpReq, config.BaseURL, config.APIKey)
 
 		httpResp, err := util.DoWithRetry(client, httpReq)
 		if err != nil {
@@ -351,20 +351,7 @@ func processStream(body io.Reader, yield func(llm.StreamEvent, error) bool) {
 			}
 		}
 	}
-	yield(llm.StreamEvent{
-		Type: llm.StreamEventTypeDone,
-		Partial: llm.Response{
-			Choices: []llm.Choice{{
-				Message: llm.Message{
-					Role:             llm.RoleAssistant,
-					Content:          text.String(),
-					ReasoningContent: reasoning.String(),
-					ToolCalls:        toolCalls,
-				},
-			}},
-			Usage: usage,
-		},
-	}, nil)
+	yield(llm.AssistantDone(text.String(), reasoning.String(), toolCalls, usage), nil)
 }
 
 func toLLMToolCall(p part, index int) llm.ToolCall {
@@ -391,22 +378,18 @@ func Compact(
 	req.DisableThinking(cfg.Name)
 	body, err := json.Marshal(req)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	request, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
-		// Non-streaming endpoint: the whole body is a single JSON response.
 		getURL(cfg.Name, cfg.BaseURL, cfg.APIKey, false),
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
-	request.Header.Set("Content-Type", "application/json")
-	if strings.Contains(strings.ToLower(cfg.BaseURL), "aiplatform.googleapis.com") && cfg.APIKey != "" {
-		request.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-	}
+	setGeminiAuth(request, cfg.BaseURL, cfg.APIKey)
 	httpResp, err := util.DoWithRetry(client, request)
 	if err != nil {
 		return "", err

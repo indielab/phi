@@ -39,27 +39,23 @@ type apiRequest struct {
 	Tools         []apiTool      `json:"tools,omitempty"`
 	Stream        bool           `json:"stream,omitempty"`
 	StreamOptions *streamOptions `json:"stream_options,omitempty"`
-	ExtraBody     *ExtraBody     `json:"extra_body,omitempty"`
+	ExtraBody     *extraBody     `json:"extra_body,omitempty"`
 }
 
-// ExtraBody holds provider-specific request fields (e.g. DeepSeek thinking).
-type ExtraBody struct {
-	Thinking *ThinkingConfig `json:"thinking,omitempty"`
+type extraBody struct {
+	Thinking *thinkingConfig `json:"thinking,omitempty"`
 }
 
-// ThinkingConfig enables reasoning mode.
-type ThinkingConfig struct {
+type thinkingConfig struct {
 	Type string `json:"type"`
 }
 
-// StreamChunk is a raw SSE chunk from the provider.
-type StreamChunk struct {
-	Choices []StreamChoice `json:"choices"`
+type streamChunk struct {
+	Choices []streamChoice `json:"choices"`
 	Usage   *llm.Usage     `json:"usage,omitempty"`
 }
 
-// StreamChoice is one streaming choice.
-type StreamChoice struct {
+type streamChoice struct {
 	Delta   llm.StreamDelta `json:"delta"`
 	Message *llm.Message    `json:"message,omitempty"`
 }
@@ -111,9 +107,9 @@ func BuildRequest(cfg llm.ModelConfig, system string, messages []llm.Message, to
 		apiTools[i] = apiTool{Type: "function", Function: t}
 	}
 
-	var extra *ExtraBody
+	var extra *extraBody
 	if isThinkingModeModel(cfg.Name) {
-		extra = &ExtraBody{Thinking: &ThinkingConfig{Type: "enabled"}}
+		extra = &extraBody{Thinking: &thinkingConfig{Type: "enabled"}}
 	}
 
 	return &apiRequest{
@@ -130,6 +126,26 @@ func isThinkingModeModel(model string) bool {
 	return strings.HasPrefix(strings.ToLower(model), "deepseek")
 }
 
+func chatCompletionsURL(baseURL string) string {
+	if strings.HasSuffix(baseURL, chatCompletionsPath) {
+		return baseURL
+	}
+	return baseURL + chatCompletionsPath
+}
+
+func newChatRequest(ctx context.Context, url, apiKey string, body []byte, stream bool) (*http.Request, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	if stream {
+		httpReq.Header.Set("Accept", util.ContentEventStream)
+	}
+	return httpReq, nil
+}
+
 // Compact sends a single non-streaming chat request and returns the assistant
 // text. Satisfies llm.Compactor for session compaction.
 func Compact(ctx context.Context, httpClient *http.Client, cfg llm.ModelConfig, prompt string) (string, error) {
@@ -141,17 +157,10 @@ func Compact(ctx context.Context, httpClient *http.Client, cfg llm.ModelConfig, 
 		return "", err
 	}
 
-	url := cfg.BaseURL
-	if !strings.HasSuffix(url, chatCompletionsPath) {
-		url += chatCompletionsPath
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	httpReq, err := newChatRequest(ctx, chatCompletionsURL(cfg.BaseURL), cfg.APIKey, body, false)
 	if err != nil {
 		return "", err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
 	httpResp, err := util.DoWithRetry(httpClient, httpReq)
 	if err != nil {
@@ -192,19 +201,11 @@ func StreamChatCompletion(
 			return
 		}
 
-		url := baseURL
-		if !strings.HasSuffix(url, chatCompletionsPath) {
-			url += chatCompletionsPath
-		}
-
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+		httpReq, err := newChatRequest(ctx, chatCompletionsURL(baseURL), apiKey, body, true)
 		if err != nil {
 			yield(llm.StreamEvent{}, err)
 			return
 		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
-		httpReq.Header.Set("Accept", util.ContentEventStream)
 
 		httpResp, err := util.DoWithRetry(httpClient, httpReq)
 		if err != nil {
@@ -239,7 +240,7 @@ func StreamChatCompletion(
 				decodeData = bytes.ReplaceAll(decodeData, []byte("\t"), []byte(" "))
 			}
 
-			var chunk StreamChunk
+			var chunk streamChunk
 			if err := json.Unmarshal(decodeData, &chunk); err != nil {
 				continue
 			}

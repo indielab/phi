@@ -134,6 +134,10 @@ skill_path: ~/.phi/skills # where SKILL.md files are loaded from
 
 agents:
   enabled: true           # default; set false to disable agent_* sub-agent tools
+  models:                 # optional per-role defaults; omit → inherit parent model
+    explore: cheap-model
+    review: strong-model
+    worker: coding-model
 
 permissions:
   mode: interactive       # interactive | readonly | autopilot | headless-strict
@@ -213,7 +217,7 @@ The editor supports:
 - `?` — shortcut help picker (lists `/`, `!`, `@`, and key bindings; `Esc` closes)
 - `!command` — run a shell command locally and stream its output into the
   transcript (see [Commands](#commands))
-- `Ctrl+K` — command palette: settings → model / theme / permissions / agents, skills, hooks
+- `Ctrl+K` — command palette: settings → model / theme / permissions / agents (incl. per-role models), skills, hooks
 
 ### Keyboard shortcuts
 
@@ -429,15 +433,21 @@ agents:
 Or toggle for the current session via the palette: settings → agents.
 When disabled, those tools are not registered and the model cannot spawn jobs.
 
+Per-role model defaults (optional) under `agents.models` pick which configured
+model name each role uses when spawned. Omitted roles inherit the parent
+session model. Switch for the current session only via
+settings → agents → models → explore|review|worker (same session-only semantics
+as settings → model; does not write `config.yaml`).
+
 Sub-agents themselves use a **role** (`explore` default | `review` | `worker`):
 
 | Role | Tools | Use for |
 |------|--------|---------|
-| `explore` | read-only (+ allowlisted bash) | Search / map structure |
-| `review` | read-only (+ allowlisted bash) | Diffs / checks; no edits |
-| `worker` | full tools except nesting | Planned, independent edits |
+| `explore` | no write/edit; bash except hard denies | Multi-hop recon / map structure |
+| `review` | same as explore | Diffs / checks; report only |
+| `worker` | full tools except nesting; bash except hard denies | Scoped, self-contained edits |
 
-Default stays explore (read-only). Prefer worker only after the parent has a concrete plan.
+Default stays explore (no edits). Prefer worker when the task is to implement a scoped change in an isolated context.
 
 ## Tools
 

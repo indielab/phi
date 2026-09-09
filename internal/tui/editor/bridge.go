@@ -68,6 +68,7 @@ func (b *commandBridge) context() commands.CommandContext {
 		ApplyTheme:       b.applyTheme,
 		SetPermissions:   b.setPermissions,
 		SetAgents:        b.setAgents,
+		SetRoleModel:     b.setRoleModel,
 		ReloadExtensions: b.reloadExtensions,
 		ListExtensions:   b.listExtensions,
 		AddSkill:         b.addSkill,
@@ -126,6 +127,21 @@ func (b *commandBridge) setAgents(enabled bool) {
 	msg := "Sub-agents: off"
 	if enabled {
 		msg = "Sub-agents: on"
+	}
+	b.toast(msg, toast.ToastSuccess, 2*time.Second)
+}
+
+func (b *commandBridge) setRoleModel(role, name string) {
+	if b == nil || b.ctrl == nil {
+		return
+	}
+	if err := b.ctrl.SetRoleModel(role, name); err != nil {
+		b.toast(err.Error(), toast.ToastError, 3*time.Second)
+		return
+	}
+	msg := fmt.Sprintf("Sub-agent %s: inherit parent", role)
+	if name != "" {
+		msg = fmt.Sprintf("Sub-agent %s: %s", role, name)
 	}
 	b.toast(msg, toast.ToastSuccess, 2*time.Second)
 }

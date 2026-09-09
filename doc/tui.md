@@ -198,7 +198,8 @@ Composer input is blocked while an overlay is active (`OverlayBlocksComposer`).
   → ExtCommands (async) → ExtCommandResultMsg → palette push / toast
 ```
 
-`commandBridge` in `editor` builds `commands.CommandContext` for builtins (model switch, theme, permissions, …).
+`commandBridge` in `editor` builds `commands.CommandContext` for builtins
+(model switch, theme, permissions, agents on/off + per-role models, …).
 
 ### 6. Background chrome
 

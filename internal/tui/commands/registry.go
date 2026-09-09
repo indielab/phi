@@ -29,6 +29,7 @@ type CommandContext struct {
 	ApplyTheme       func(name string)
 	SetPermissions   func(bypass bool)
 	SetAgents        func(enabled bool)
+	SetRoleModel     func(role, name string) // name "" → inherit parent
 	ReloadExtensions func()
 	ListExtensions   func() []palette.PaletteCommand
 	AddSkill         func(name string)

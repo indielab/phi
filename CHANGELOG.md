@@ -18,12 +18,44 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- MCP HTTP transport: SSE bodies that interleave server notifications
+  (e.g. `notifications/message` log frames, no `id`) before the JSON-RPC
+  response frame now resolve to the response frame instead of the first
+  parseable frame, which previously made `tools/call` return an empty
+  result when a server streams log frames before answering.
 - Preserve Unicode when copying TUI text to the Windows clipboard.
 
 ### Security
 
 <!-- Released section -->
 <!-- Don't change this section unless doing release -->
+
+## [0.25.0] - 2026-09-09
+
+### Added
+
+- Sub-agents: optional per-role model defaults in `agents.models` (`explore` /
+  `review` / `worker`). Palette: settings → agents → models → role → model
+  (session-only; `(inherit parent)` clears). Omitted roles inherit the parent
+  model. (`project`, `agent`, `tui`)
+
+### Changed
+
+- Sub-agents: child gates use `BashDefault=Allow` (hard deny list still applies), so explore/review/worker can run non-allowlisted shell (`make`, pipelines, tests) without Ask→Deny folding. Role hints and parent spawn guidance emphasize task contracts (recon / review report / scoped implement) rather than allowlisted bash. Hard deny now also blocks piping into `sh`/`bash`.
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+- Agent: mid-loop context-window overflow (`prompt is too long` and similar
+  provider errors) now force-compacts once and retries the stream instead of
+  failing the turn cold. A second overflow still fails closed. (`agent`, `llm`)
+- Config: `agents.enabled` omitted under an `agents:` block (e.g. only
+  `agents.models` set) no longer decodes as false; default stays on. (`project`)
+
+### Security
 
 ## [0.24.0] - 2026-09-08
 
@@ -405,7 +437,8 @@ Earlier releases are available from GitHub tags only.
 
 <!-- Released section ended -->
 
-[Unreleased]: https://github.com/pulseaiclub/phi/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/pulseaiclub/phi/compare/v0.24.0...HEAD
+[0.25.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.25.0
 [0.24.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.24.0
 [0.23.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.23.0
 [0.22.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.22.0
