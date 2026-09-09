@@ -215,3 +215,167 @@ func TestLoopContinueAskDeclineReturnsErrMaxRounds(t *testing.T) {
 	}
 	require.ErrorIs(t, lastErr, ErrMaxRounds)
 }
+
+// overflowThenOKServer fails the first streaming chat with a context overflow,
+// serves a non-stream compact summary, then streams a final text reply.
+func overflowThenOKServer(streamHits *atomic.Int32) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if stream, _ := body["stream"].(bool); stream {
+			n := streamHits.Add(1)
+			if n == 1 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"message":"prompt is too long: 210000 > 200000 tokens"}}`))
+				return
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = fmt.Fprint(w, sseTextChunk("recovered"))
+			_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+			return
+		}
+		// Compaction Compact() is non-streaming chat.
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []any{map[string]any{
+				"message": map[string]any{"role": "assistant", "content": "prior work summarized"},
+			}},
+		})
+	}))
+}
+
+func TestLoopOverflowCompactsAndRetries(t *testing.T) {
+	var streamHits atomic.Int32
+	server := overflowThenOKServer(&streamHits)
+	defer server.Close()
+
+	sess, err := NewSession(WithCwd(t.TempDir()))
+	require.NoError(t, err)
+	// Seed enough prior usage that force-compact has a summarizable prefix
+	// (default keepRecentTokens is 20k).
+	require.NoError(t, sess.Append(
+		llm.Message{Role: llm.RoleUser, Content: "old1", Usage: llm.Usage{TotalTokens: 12000}},
+		llm.Message{Role: llm.RoleAssistant, Content: "old2", Usage: llm.Usage{TotalTokens: 12000}},
+		llm.Message{Role: llm.RoleUser, Content: "old3", Usage: llm.Usage{TotalTokens: 5000}},
+		llm.Message{Role: llm.RoleAssistant, Content: "old4", Usage: llm.Usage{TotalTokens: 5000}},
+	))
+
+	engine, err := NewEngine(
+		llm.ModelConfig{Name: "fake", BaseURL: server.URL, APIKey: "x", ContextWindow: 200_000},
+		sess,
+		WithGate(permission.AllowAll{}),
+		WithTools([]tools.Tool{}),
+	)
+	require.NoError(t, err)
+
+	var lastErr error
+	var finalText string
+	var sawCompact bool
+	for ev, err := range engine.Loop(t.Context(), "continue", LoopOpts{}) {
+		if err != nil {
+			lastErr = err
+			break
+		}
+		switch e := ev.(type) {
+		case session.CompactionStarted:
+			sawCompact = true
+		case session.AssistantMessageUpdate:
+			if e.Message.State == session.StateComplete {
+				finalText = e.Message.FlatText()
+			}
+		}
+	}
+	require.NoError(t, lastErr)
+	require.True(t, sawCompact, "expected overflow path to emit CompactionStarted")
+	require.Equal(t, int32(2), streamHits.Load(), "overflow then one retry stream")
+	require.Equal(t, "recovered", finalText)
+}
+
+func TestLoopOverflowFailsClosedAfterOneRetry(t *testing.T) {
+	var streamHits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if stream, _ := body["stream"].(bool); stream {
+			streamHits.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"prompt is too long: 210000 > 200000 tokens"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []any{map[string]any{
+				"message": map[string]any{"role": "assistant", "content": "summary"},
+			}},
+		})
+	}))
+	defer server.Close()
+
+	sess, err := NewSession(WithCwd(t.TempDir()))
+	require.NoError(t, err)
+	require.NoError(t, sess.Append(
+		llm.Message{Role: llm.RoleUser, Content: "old1", Usage: llm.Usage{TotalTokens: 12000}},
+		llm.Message{Role: llm.RoleAssistant, Content: "old2", Usage: llm.Usage{TotalTokens: 12000}},
+		llm.Message{Role: llm.RoleUser, Content: "old3", Usage: llm.Usage{TotalTokens: 5000}},
+		llm.Message{Role: llm.RoleAssistant, Content: "old4", Usage: llm.Usage{TotalTokens: 5000}},
+	))
+
+	engine, err := NewEngine(
+		llm.ModelConfig{Name: "fake", BaseURL: server.URL, APIKey: "x", ContextWindow: 200_000},
+		sess,
+		WithGate(permission.AllowAll{}),
+		WithTools([]tools.Tool{}),
+	)
+	require.NoError(t, err)
+
+	var lastErr error
+	for ev, err := range engine.Loop(t.Context(), "continue", LoopOpts{}) {
+		_ = ev
+		if err != nil {
+			lastErr = err
+			break
+		}
+	}
+	require.Error(t, lastErr)
+	require.True(t, llm.IsContextOverflow(lastErr))
+	require.Equal(t, int32(2), streamHits.Load(), "one recovery attempt then fail")
+}
+
+func TestLoopNonOverflowErrorDoesNotCompact(t *testing.T) {
+	var streamHits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		streamHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"message":"Incorrect API key provided"}}`))
+	}))
+	defer server.Close()
+
+	sess, err := NewSession(WithCwd(t.TempDir()))
+	require.NoError(t, err)
+	engine, err := NewEngine(
+		llm.ModelConfig{Name: "fake", BaseURL: server.URL, APIKey: "x"},
+		sess,
+		WithGate(permission.AllowAll{}),
+		WithTools([]tools.Tool{}),
+	)
+	require.NoError(t, err)
+
+	var lastErr error
+	var sawCompact bool
+	for ev, err := range engine.Loop(t.Context(), "go", LoopOpts{}) {
+		if err != nil {
+			lastErr = err
+			break
+		}
+		if _, ok := ev.(session.CompactionStarted); ok {
+			sawCompact = true
+		}
+	}
+	require.Error(t, lastErr)
+	require.False(t, llm.IsContextOverflow(lastErr))
+	require.False(t, sawCompact)
+	require.Equal(t, int32(1), streamHits.Load())
+}

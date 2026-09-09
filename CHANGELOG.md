@@ -20,6 +20,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- Agent: mid-loop context-window overflow (`prompt is too long` and similar
+  provider errors) now force-compacts once and retries the stream instead of
+  failing the turn cold. A second overflow still fails closed. (`agent`, `llm`)
+
 ### Security
 
 <!-- Released section -->
