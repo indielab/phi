@@ -18,6 +18,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- MCP HTTP transport: SSE bodies that interleave server notifications
+  (e.g. `notifications/message` log frames, no `id`) before the JSON-RPC
+  response frame now resolve to the response frame instead of the first
+  parseable frame, which previously made `tools/call` return an empty
+  result when a server streams log frames before answering.
+
 ### Security
 
 <!-- Released section -->
