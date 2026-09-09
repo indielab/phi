@@ -39,7 +39,7 @@ func TestGetStreamURL(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			url := getStreamURL(tc.model, tc.baseURL, tc.apiKey)
+			url := getURL(tc.model, tc.baseURL, tc.apiKey, true)
 			assert.Equal(t, tc.expect, url)
 		})
 	}

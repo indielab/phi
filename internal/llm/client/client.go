@@ -13,9 +13,9 @@ import (
 	"github.com/pulseaiclub/phi/internal/util"
 )
 
-// Client talks to the configured LLM endpoint: the OpenAI-compatible
-// /chat/completions API by default, or the Anthropic Messages API when the
-// config targets anthropic (see isAnthropicProvider).
+// Client talks to the configured LLM endpoint: OpenAI-compatible by default,
+// or Anthropic / Gemini when the config matches (see isAnthropicProvider /
+// isGeminiProvider).
 type Client struct {
 	httpClient *http.Client
 	cfg        llm.ModelConfig
@@ -39,50 +39,32 @@ func NewClient(cfg llm.ModelConfig, tools []llm.ToolDefinition, systemPrompt str
 
 // Stream runs a streaming chat completion over messages (+ optional system prompt / tools).
 func (c *Client) Stream(ctx context.Context, messages []llm.Message) iter.Seq2[llm.StreamEvent, error] {
-	return func(yield func(llm.StreamEvent, error) bool) {
-		if c.anthropic {
-			req := anthropic.BuildRequest(c.cfg, c.system, messages, c.tools)
-			for ev, err := range anthropic.Stream(ctx, c.httpClient, c.cfg, &req) {
-				if !yield(ev, err) {
-					return
-				}
-			}
-			return
-		}
-
-		if c.gemini {
-			req := gemini.BuildRequest(c.system, messages, c.tools)
-			for ev, err := range gemini.Stream(ctx, c.httpClient, c.cfg, &req) {
-				if !yield(ev, err) {
-					return
-				}
-			}
-			return
-		}
-
+	switch {
+	case c.anthropic:
+		req := anthropic.BuildRequest(c.cfg, c.system, messages, c.tools)
+		return anthropic.Stream(ctx, c.httpClient, c.cfg, &req)
+	case c.gemini:
+		req := gemini.BuildRequest(c.system, messages, c.tools)
+		return gemini.Stream(ctx, c.httpClient, c.cfg, &req)
+	default:
 		req := openai.BuildRequest(c.cfg, c.system, messages, c.tools)
-		for ev, err := range openai.StreamChatCompletion(ctx, c.httpClient, c.cfg.BaseURL, c.cfg.APIKey, req) {
-			if !yield(ev, err) {
-				return
-			}
-		}
+		return openai.StreamChatCompletion(ctx, c.httpClient, c.cfg.BaseURL, c.cfg.APIKey, req)
 	}
 }
 
 // Compact sends a single non-streaming chat request and returns the
 // assistant text. It satisfies llm.Compactor for session compaction.
 func (c *Client) Compact(ctx context.Context, prompt string) (string, error) {
-	if c.anthropic {
+	switch {
+	case c.anthropic:
 		return anthropic.Compact(ctx, c.httpClient, c.cfg, prompt)
-	}
-	if c.gemini {
+	case c.gemini:
 		return gemini.Compact(ctx, c.httpClient, c.cfg, prompt)
+	default:
+		return openai.Compact(ctx, c.httpClient, c.cfg, prompt)
 	}
-	return openai.Compact(ctx, c.httpClient, c.cfg, prompt)
 }
 
-// isAnthropicProvider reports whether the config targets the Anthropic
-// Messages API: either an anthropic base URL or a claude model name.
 func isAnthropicProvider(cfg llm.ModelConfig) bool {
 	base := strings.ToLower(cfg.BaseURL)
 	if strings.Contains(base, "anthropic") {
@@ -91,7 +73,6 @@ func isAnthropicProvider(cfg llm.ModelConfig) bool {
 	return strings.HasPrefix(strings.ToLower(cfg.Name), "claude")
 }
 
-// isGeminiProvider reports a Gemini model or Google AI Studio base URL.
 func isGeminiProvider(cfg llm.ModelConfig) bool {
 	base := strings.ToLower(cfg.BaseURL)
 	name := strings.ToLower(cfg.Name)
