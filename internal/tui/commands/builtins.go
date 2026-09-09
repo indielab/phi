@@ -80,7 +80,7 @@ func registerBuiltinCommands(r *CommandRegistry) {
 	r.Register(Command{
 		Name: "settings-agents",
 		PaletteRoot: func(ctx CommandContext) palette.PaletteCommand {
-			return AgentsCommand(ctx.SetAgents)
+			return AgentsCommand(ctx.SetAgents, ctx.SetRoleModel, ctx.ModelNames)
 		},
 	})
 	r.Register(Command{
@@ -181,13 +181,50 @@ func PermissionsCommand(set func(bypass bool)) palette.PaletteCommand {
 	}
 }
 
-// AgentsCommand returns settings → agents to toggle sub-agent tools.
-func AgentsCommand(set func(enabled bool)) palette.PaletteCommand {
+// AgentsCommand returns settings → agents to toggle sub-agent tools and
+// pick per-role models (session-only; empty name inherits the parent model).
+func AgentsCommand(
+	set func(enabled bool),
+	setRoleModel func(role, name string),
+	modelNames []string,
+) palette.PaletteCommand {
+	roles := []string{"explore", "review", "worker"}
+	roleCmds := make([]palette.PaletteCommand, 0, len(roles))
+	for _, role := range roles {
+		models := make([]palette.PaletteCommand, 0, len(modelNames)+1)
+		models = append(models, palette.PaletteCommand{
+			ID:   "agents-model-" + role + "-inherit",
+			Verb: "(inherit parent)",
+			Run: func() {
+				if setRoleModel != nil {
+					setRoleModel(role, "")
+				}
+			},
+		})
+		for _, name := range modelNames {
+			models = append(models, palette.PaletteCommand{
+				ID:   "agents-model-" + role + "-" + name,
+				Verb: name,
+				Run: func() {
+					if setRoleModel != nil {
+						setRoleModel(role, name)
+					}
+				},
+			})
+		}
+		roleCmds = append(roleCmds, palette.PaletteCommand{
+			ID:           "agents-models-" + role,
+			Verb:         role,
+			Keywords:     []string{role, "model"},
+			SubmenuTitle: "Model for " + role,
+			Submenu:      models,
+		})
+	}
 	return palette.PaletteCommand{
 		ID:           "settings-agents",
 		Noun:         "settings",
 		Verb:         "agents",
-		Keywords:     []string{"agent", "subagent", "spawn", "jobs", "parallel"},
+		Keywords:     []string{"agent", "subagent", "spawn", "jobs", "parallel", "model"},
 		SubmenuTitle: "Sub-agents",
 		Submenu: []palette.PaletteCommand{
 			{
@@ -209,6 +246,13 @@ func AgentsCommand(set func(enabled bool)) palette.PaletteCommand {
 						set(false)
 					}
 				},
+			},
+			{
+				ID:           "agents-models",
+				Verb:         "models",
+				Keywords:     []string{"model", "explore", "review", "worker"},
+				SubmenuTitle: "Sub-agent Models",
+				Submenu:      roleCmds,
 			},
 		},
 	}

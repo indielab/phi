@@ -10,6 +10,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- Sub-agents: optional per-role model defaults in `agents.models` (`explore` /
+  `review` / `worker`). Palette: settings → agents → models → role → model
+  (session-only; `(inherit parent)` clears). Omitted roles inherit the parent
+  model. (`project`, `agent`, `tui`)
+
 ### Changed
 
 - Sub-agents: child gates use `BashDefault=Allow` (hard deny list still applies), so explore/review/worker can run non-allowlisted shell (`make`, pipelines, tests) without Ask→Deny folding. Role hints and parent spawn guidance emphasize task contracts (recon / review report / scoped implement) rather than allowlisted bash. Hard deny now also blocks piping into `sh`/`bash`.
@@ -23,6 +28,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Agent: mid-loop context-window overflow (`prompt is too long` and similar
   provider errors) now force-compacts once and retries the stream instead of
   failing the turn cold. A second overflow still fails closed. (`agent`, `llm`)
+- Config: `agents.enabled` omitted under an `agents:` block (e.g. only
+  `agents.models` set) no longer decodes as false; default stays on. (`project`)
 
 ### Security
 

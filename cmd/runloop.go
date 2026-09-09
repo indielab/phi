@@ -15,6 +15,8 @@ import (
 
 	"github.com/pulseaiclub/phi/internal/agent"
 	"github.com/pulseaiclub/phi/internal/extension"
+	"github.com/pulseaiclub/phi/internal/job"
+	"github.com/pulseaiclub/phi/internal/llm"
 	"github.com/pulseaiclub/phi/internal/mcp"
 	"github.com/pulseaiclub/phi/internal/session"
 	"github.com/pulseaiclub/phi/internal/tools"
@@ -85,7 +87,23 @@ func runHeadless(opts runOptions) error {
 		defer func() { _ = pool.Close() }()
 	}
 	if bs.Config.Agents.Enabled {
-		jobs, jobErr := agent.NewJobManager(bs.Proj.JobsDir(), bs.Config.Model(), nil, func() *extension.Runner {
+		parent := bs.Config.Model()
+		jobs, jobErr := agent.NewJobManager(bs.Proj.JobsDir(), parent, func(role job.Role) llm.ModelConfig {
+			m := bs.Config.Agents.Models
+			var name string
+			switch job.NormalizeRole(string(role)) {
+			case job.RoleReview:
+				name = m.Review
+			case job.RoleWorker:
+				name = m.Worker
+			default:
+				name = m.Explore
+			}
+			if cfg, ok := bs.Config.FindModel(name); ok {
+				return cfg
+			}
+			return parent
+		}, func() *extension.Runner {
 			return extRunner
 		})
 		if jobErr != nil {
