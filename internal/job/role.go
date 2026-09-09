@@ -9,11 +9,11 @@ import (
 type Role string
 
 const (
-	// RoleExplore is read-only codebase search / structure (default).
+	// RoleExplore is codebase recon without write/edit (default); bash allowed.
 	RoleExplore Role = "explore"
-	// RoleWorker may read and write; for planned, independent change blocks.
+	// RoleWorker may read and write; for scoped, self-contained change blocks.
 	RoleWorker Role = "worker"
-	// RoleReview is read-only + bash for diffs / checks (no edits).
+	// RoleReview is diffs / checks without edits; same tools as explore.
 	RoleReview Role = "review"
 )
 

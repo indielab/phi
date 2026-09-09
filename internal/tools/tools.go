@@ -81,8 +81,8 @@ func DefaultTools() []Tool {
 }
 
 // ReadonlyTools returns exploration tools without write/edit.
-// Bash remains available but should be paired with ModeReadonly so only
-// allowlisted commands run (no file mutations via the shell).
+// Bash remains registered; pair with ModeReadonly (and typically
+// ChildPolicy) so write/edit stay denied while non-deny bash is allowed.
 func ReadonlyTools() []Tool {
 	return []Tool{
 		bashtool.BashTool(),

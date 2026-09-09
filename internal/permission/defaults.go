@@ -26,6 +26,8 @@ var defaultBashDeny = []string{
 	`>\s*/etc/`,
 	`curl\s+.*\|\s*(ba)?sh`,
 	`wget\s+.*\|\s*(ba)?sh`,
+	// Any pipe into a shell (child policies default-allow bash).
+	`\|\s*(ba)?sh\b`,
 	`mkfs\b`,
 	`dd\s+if=`,
 	`:(){ :\|:& };:`,

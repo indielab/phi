@@ -104,3 +104,13 @@ func DefaultPolicy() Policy {
 		WorkspaceOnlyReads:  false,
 	}
 }
+
+// ChildPolicy is the default gate for sub-agents: no interactive Ask, bash
+// allowed unless it matches the hard deny list. Mode still folds writes
+// (Readonly) or Ask leftovers (HeadlessStrict).
+func ChildPolicy(mode Mode) Policy {
+	p := DefaultPolicy()
+	p.Mode = mode
+	p.BashDefault = Allow
+	return p
+}
