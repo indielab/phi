@@ -191,7 +191,6 @@ func AgentsCommand(
 	roles := []string{"explore", "review", "worker"}
 	roleCmds := make([]palette.PaletteCommand, 0, len(roles))
 	for _, role := range roles {
-		role := role
 		models := make([]palette.PaletteCommand, 0, len(modelNames)+1)
 		models = append(models, palette.PaletteCommand{
 			ID:   "agents-model-" + role + "-inherit",
@@ -203,7 +202,6 @@ func AgentsCommand(
 			},
 		})
 		for _, name := range modelNames {
-			name := name
 			models = append(models, palette.PaletteCommand{
 				ID:   "agents-model-" + role + "-" + name,
 				Verb: name,
