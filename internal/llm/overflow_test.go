@@ -19,17 +19,31 @@ func TestIsContextOverflow(t *testing.T) {
 		{name: "unrelated", err: errors.New("connection reset"), want: false},
 		{
 			name: "claude prompt too long",
-			err:  FormatAPIError("anthropic", 400, []byte(`{"error":{"message":"prompt is too long: 210000 > 200000 tokens"}}`)),
+			err: FormatAPIError(
+				"anthropic",
+				400,
+				[]byte(`{"error":{"message":"prompt is too long: 210000 > 200000 tokens"}}`),
+			),
 			want: true,
 		},
 		{
 			name: "openai-compatible context window",
-			err:  FormatAPIError("LLM", 400, []byte(`{"error":{"message":"Your input exceeds the context window of this model"}}`)),
+			err: FormatAPIError(
+				"LLM",
+				400,
+				[]byte(`{"error":{"message":"Your input exceeds the context window of this model"}}`),
+			),
 			want: true,
 		},
 		{
 			name: "gemini token count",
-			err:  FormatAPIError("gemini", 400, []byte(`{"error":{"message":"The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)"}}`)),
+			err: FormatAPIError(
+				"gemini",
+				400,
+				[]byte(
+					`{"error":{"message":"The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)"}}`,
+				),
+			),
 			want: true,
 		},
 		{
@@ -44,7 +58,7 @@ func TestIsContextOverflow(t *testing.T) {
 		},
 		{
 			name: "throttling excluded",
-			err:  errors.New("Throttling error: Too many tokens, please wait before trying again."),
+			err:  errors.New("throttling error: too many tokens, please wait before trying again"),
 			want: false,
 		},
 		{
