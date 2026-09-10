@@ -8,7 +8,7 @@ type Progress struct {
 	ParentToolUseID string // parent agent tool_use id when known
 	ToolUseID       string
 	Name            string
-	Status          string // e.g. session.ToolStatus.String(): in-progress, done, error
+	Status          string // session.ToolStatus.String(); decode with session.ParseToolStatus
 	Detail          string
 	Time            time.Time
 }

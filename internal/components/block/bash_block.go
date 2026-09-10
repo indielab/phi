@@ -8,19 +8,8 @@ import (
 
 	"github.com/pulseaiclub/phi/internal/components"
 	"github.com/pulseaiclub/phi/internal/components/chrome"
+	"github.com/pulseaiclub/phi/internal/components/status"
 	"github.com/pulseaiclub/phi/internal/util"
-)
-
-// BashStatus mirrors bash tool status.
-type BashStatus int
-
-// Bash status values for a bash tool output row.
-const (
-	BashDone BashStatus = iota
-	BashRunning
-	BashError
-	BashCancelled
-	BashRejected
 )
 
 // BashBlock renders bash tool / "!cmd" output:
@@ -35,7 +24,7 @@ const (
 type BashBlock struct {
 	Command  string
 	Output   string
-	Status   BashStatus
+	Status   status.ToolStatus
 	ExitCode int
 	Expanded bool
 	Theme    components.Theme
@@ -96,7 +85,7 @@ func (bashBlock *BashBlock) CopyText() string {
 }
 
 func (bashBlock *BashBlock) hasBody() bool {
-	return strings.TrimSpace(bashBlock.Output) != "" || (bashBlock.Status == BashError)
+	return strings.TrimSpace(bashBlock.Output) != "" || bashBlock.Status == status.ToolError
 }
 
 // Draw renders the "$ command" title and, when expanded, the truncated output body.
@@ -135,16 +124,16 @@ func (bashBlock *BashBlock) Draw(ctx components.DrawContext) components.Surface 
 func (bashBlock *BashBlock) titleSpans(th components.Theme) []components.Span {
 	prefixStyle := th.IdentityOrSuccess()
 	switch bashBlock.Status {
-	case BashError:
+	case status.ToolError:
 		prefixStyle = th.Destructive
-	case BashRunning:
+	case status.ToolRunning, status.ToolQueued:
 		prefixStyle = th.ToolName
-	case BashCancelled, BashRejected:
+	case status.ToolCancelled, status.ToolRejected:
 		prefixStyle = th.Muted
 	}
 
 	cmdStyle := th.Foreground
-	if bashBlock.Status == BashCancelled || bashBlock.Status == BashRejected {
+	if bashBlock.Status == status.ToolCancelled || bashBlock.Status == status.ToolRejected {
 		cmdStyle.Strikethrough = true
 	}
 
@@ -152,13 +141,10 @@ func (bashBlock *BashBlock) titleSpans(th components.Theme) []components.Span {
 		{Text: chrome.BashPrompt, Style: prefixStyle},
 		{Text: bashBlock.Command, Style: cmdStyle},
 	}
-	switch bashBlock.Status {
-	case BashCancelled:
-		title = append(title, components.Span{Text: " (cancelled)", Style: th.Muted})
-	case BashRejected:
-		title = append(title, components.Span{Text: " (rejected)", Style: th.Muted})
+	if suf := chrome.StatusSuffix(bashBlock.Status); suf != "" {
+		title = append(title, components.Span{Text: suf, Style: th.Muted})
 	}
-	if bashBlock.Status == BashDone && bashBlock.ExitCode != 0 {
+	if bashBlock.Status == status.ToolDone && bashBlock.ExitCode != 0 {
 		it := xui.Style{Italic: true}
 		title = append(
 			title,
