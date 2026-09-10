@@ -29,6 +29,8 @@ A lean, high-performance terminal coding agent harness in Go — a sibling to Pi
 
 ![phi TUI](assets/image.png)
 
+![phi diff review](assets/diff.png)
+
 - [Docs](https://pulseaiclub.github.io/docs/getting-started/)
 - [Quick start](#quick-start)
 - [Footprint](#footprint)
@@ -241,8 +243,6 @@ the palette under settings → theme.
 
 `/diff` is a full-screen git review inside the TUI — read the change, leave
 line notes, then hand them to the agent without leaving the terminal.
-
-![phi diff review](assets/diff.png)
 
 | Command | What opens |
 | --- | --- |
