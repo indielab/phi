@@ -28,7 +28,7 @@
 
 ![phi TUI](assets/image.png)
 
-你可以通过 [Skills（技能）](#skills技能)、[Hooks（钩子）](#hooks钩子)
+你可以通过 [Skills（技能）](#skills技能)、[Extensions（扩展）](#extensions扩展)
 和 [MCP](#mcp) 扩展它——不必做成插件框架。
 
 - [文档](https://pulseaiclub.github.io/docs/getting-started/)
@@ -41,7 +41,7 @@
 - [无头模式](#无头模式)
 - [Skills（技能）](#skills技能)
 - [权限](#权限)
-- [Hooks（钩子）](#hooks钩子)
+- [Extensions（扩展）](#extensions扩展)
 - [MCP](#mcp)
 - [子代理](#子代理)
 - [工具](#工具)

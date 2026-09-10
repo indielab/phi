@@ -38,7 +38,7 @@ A lean, high-performance terminal coding agent harness in Go — a sibling to Pi
 - [Headless mode](#headless-mode)
 - [Skills](#skills)
 - [Permissions](#permissions)
-- [Hooks](#hooks)
+- [Extensions](#extensions)
 - [MCP](#mcp)
 - [Tools](#tools)
 - [Project layout](doc/project-layout.md)

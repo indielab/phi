@@ -11,7 +11,10 @@ GO       ?= go
 GOFLAGS  ?= -ldflags="-s -w"
 CGO      ?= 0
 
-.PHONY: all build install run clean test fmt fmt-check lint deadcode check help
+# Pin digest so CI / local make use the same markdownlint image.
+MARKDOWN_LINT_IMAGE ?= avtodev/markdown-lint:v1@sha256:6aeedc2f49138ce7a1cd0adffc1b1c0321b841dc2102408967d9301c031949ee
+
+.PHONY: all build install run clean test fmt fmt-check lint lint-markdown deadcode check help
 
 all: build
 
@@ -52,6 +55,10 @@ lint:
 	golangci-lint run ./...
 	cd ext/go && golangci-lint run ./...
 
+# Markdown structure lint (Docker). Needs a local Docker daemon.
+lint-markdown:
+	docker run --rm -v "$(CURDIR):/work" -w /work $(MARKDOWN_LINT_IMAGE) -c /work/.markdownlint.yaml $$(find . -name '*.md' -type f | sort)
+
 deadcode:
 	./scripts/deadcode-check.sh
 
@@ -71,6 +78,7 @@ help:
 	@echo "  make fmt      - format Go sources (gofumpt/goimports/golines)"
 	@echo "  make fmt-check - check formatting without writing (CI)"
 	@echo "  make lint     - run golangci-lint"
+	@echo "  make lint-markdown - lint Markdown (Docker; needs daemon)"
 	@echo "  make deadcode - unreachable func check (deadcode -test vs baseline)"
 	@echo "  make check    - fmt-check + lint + deadcode (CI)"
 	@echo "  make test-rust - test Rust extension SDK (ext/rust)"
