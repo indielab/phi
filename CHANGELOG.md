@@ -18,6 +18,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+### Security
+
+<!-- Released section -->
+<!-- Don't change this section unless doing release -->
+
+## [0.25.1] - 2026-09-10
+
+### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
 - MCP HTTP transport: SSE bodies that interleave server notifications
   (e.g. `notifications/message` log frames, no `id`) before the JSON-RPC
   response frame now resolve to the response frame instead of the first
@@ -26,9 +43,6 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Preserve Unicode when copying TUI text to the Windows clipboard.
 
 ### Security
-
-<!-- Released section -->
-<!-- Don't change this section unless doing release -->
 
 ## [0.25.0] - 2026-09-09
 
@@ -437,7 +451,8 @@ Earlier releases are available from GitHub tags only.
 
 <!-- Released section ended -->
 
-[Unreleased]: https://github.com/pulseaiclub/phi/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/pulseaiclub/phi/compare/v0.25.0...HEAD
+[0.25.1]: https://github.com/pulseaiclub/phi/releases/tag/v0.25.1
 [0.25.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.25.0
 [0.24.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.24.0
 [0.23.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.23.0
