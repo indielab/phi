@@ -407,7 +407,7 @@ func (extension *ExtensionAPI) Run() error {
 					tr.Error = err.Error()
 					tr.Content = err.Error()
 				} else {
-					tr.Content, tr.Detail, tr.Output = res.Content, res.Detail, res.Output
+					tr.Content, tr.Detail, tr.Output, tr.Expanded = res.Content, res.Detail, res.Output, res.Expanded
 				}
 			} else {
 				tr.IsError = true

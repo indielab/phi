@@ -3,6 +3,9 @@ package transcript_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/phi/internal/components"
 	"github.com/pulseaiclub/phi/internal/components/block"
 	"github.com/pulseaiclub/phi/internal/job"
@@ -86,4 +89,26 @@ func TestApplyProgressReportsChange(t *testing.T) {
 	if !s.ApplyProgress(p) {
 		t.Fatal("status change should dirty")
 	}
+}
+
+func TestMapperToolExpandedFromRun(t *testing.T) {
+	m := transcript.NewMapper(components.DefaultTheme(), nil, nil)
+	snap := session.Snapshot{
+		Messages: []session.Message{{
+			ID: "a1", Role: session.RoleAssistant, State: session.StateComplete,
+			Content: []session.ContentBlock{{Type: session.BlockToolUse, ID: "t1", Name: "plan"}},
+		}},
+		Tools: map[string]session.ToolRun{
+			"t1": {
+				ToolUseID: "t1", Name: "plan", Status: session.ToolDone,
+				Detail: "plan", Output: "# steps\n1. a", Expanded: true,
+			},
+		},
+	}
+	entries, _, _ := m.Sync(nil, nil, snap)
+	require.Len(t, entries, 1)
+	tb, ok := entries[0].(*block.ToolBlock)
+	require.True(t, ok)
+	assert.True(t, tb.Expanded)
+	assert.Equal(t, "# steps\n1. a", tb.Output)
 }

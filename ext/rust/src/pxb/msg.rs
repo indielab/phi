@@ -52,6 +52,7 @@ const F_TOOL_RES_DETAIL: u16 = 2;
 const F_TOOL_RES_OUTPUT: u16 = 3;
 const F_TOOL_RES_IS_ERROR: u16 = 4;
 const F_TOOL_RES_ERROR: u16 = 5;
+const F_TOOL_RES_EXPANDED: u16 = 6; // TUI tool row starts expanded
 
 const F_IX_REQ_EVENT: u16 = 1;
 const F_IX_REQ_TOOL_NAME: u16 = 2;
@@ -444,6 +445,8 @@ pub struct ToolResultMsg {
     pub output: String,
     pub is_error: bool,
     pub error: String,
+    /// TUI tool row starts expanded (user toggle still wins).
+    pub expanded: bool,
 }
 
 pub fn encode_tool_result(t: &ToolResultMsg) -> Vec<u8> {
@@ -453,6 +456,9 @@ pub fn encode_tool_result(t: &ToolResultMsg) -> Vec<u8> {
     fw.put_string(F_TOOL_RES_OUTPUT, &t.output);
     fw.put_bool(F_TOOL_RES_IS_ERROR, t.is_error);
     fw.put_string(F_TOOL_RES_ERROR, &t.error);
+    if t.expanded {
+        fw.put_bool(F_TOOL_RES_EXPANDED, true);
+    }
     fw.into_vec()
 }
 
@@ -465,6 +471,7 @@ pub fn decode_tool_result(b: &[u8]) -> Result<ToolResultMsg, Error> {
             F_TOOL_RES_OUTPUT => t.output = take_string(kind, fr)?,
             F_TOOL_RES_IS_ERROR => t.is_error = take_u64(kind, fr)? != 0,
             F_TOOL_RES_ERROR => t.error = take_string(kind, fr)?,
+            F_TOOL_RES_EXPANDED => t.expanded = take_u64(kind, fr)? != 0,
             _ => fr.skip(kind)?,
         }
         Ok(())
@@ -847,6 +854,7 @@ mod tests {
                     output: "o".into(),
                     is_error: true,
                     error: "e".into(),
+                    expanded: true,
                 }),
                 |b| Ok(encode_tool_result(&decode_tool_result(b)?)),
             ),

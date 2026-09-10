@@ -280,7 +280,9 @@ func (e *Executor) runOne(
 		_ = emit(session.ToolData{Run: e.toolRun(call, session.ToolError, detail, errText, output)})
 		return e.toolMessage(call.ID, modelContent), postStop, postReason
 	}
-	_ = emit(session.ToolData{Run: e.toolRun(call, session.ToolDone, detail, "", output)})
+	run := e.toolRun(call, session.ToolDone, detail, "", output)
+	run.Expanded = result.Expanded
+	_ = emit(session.ToolData{Run: run})
 	return e.toolMessage(call.ID, modelContent), postStop, postReason
 }
 

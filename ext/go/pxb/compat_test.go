@@ -167,6 +167,21 @@ func TestToolDetailResultRoundTrip(t *testing.T) {
 	assert.Equal(t, in.Detail, out.Detail)
 }
 
+func TestToolResultExpandedRoundTrip(t *testing.T) {
+	in := pxb.ToolResultMsg{
+		Content: "plan body", Detail: "plan", Output: "plan body", Expanded: true,
+	}
+	out, err := pxb.DecodeToolResult(pxb.EncodeToolResult(in))
+	require.NoError(t, err)
+	assert.Equal(t, in, out)
+
+	// False omits the field (old hosts stay collapsed).
+	raw := pxb.EncodeToolResult(pxb.ToolResultMsg{Content: "c"})
+	collapsed, err := pxb.DecodeToolResult(raw)
+	require.NoError(t, err)
+	assert.False(t, collapsed.Expanded)
+}
+
 func TestUnknownEventCodeMapsEmpty(t *testing.T) {
 	assert.Empty(t, pxb.EventName(999))
 	assert.Equal(t, uint16(0), pxb.EventCode("nope"))

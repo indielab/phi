@@ -80,6 +80,9 @@ Set `DetailFromArgs` so the TUI tool row shows a one-line summary (path, URL, â€
 instead of raw JSON while the tool is in progress. The host RPCs the extension
 with a short default timeout (not `TimeoutSec`).
 
+Set `Expanded: true` on `ToolResult` when the tool body should start open in the
+TUI (e.g. a plan). The user can still collapse it; toggle state wins after that.
+
 Set `Readable: true` on side-effect-free tools (read-only lookups, pure
 computation) so the host may run a batch of all-readable calls concurrently.
 

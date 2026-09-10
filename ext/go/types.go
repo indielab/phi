@@ -137,6 +137,8 @@ type ToolResult struct {
 	Content string
 	Detail  string
 	Output  string
+	// Expanded asks the TUI to start the tool row open (user toggle still wins).
+	Expanded bool
 }
 
 // Tool registers an LLM-callable tool.

@@ -53,11 +53,12 @@ const (
 	fToolInvName uint16 = 1
 	fToolInvArgs uint16 = 2
 
-	fToolResContent uint16 = 1
-	fToolResDetail  uint16 = 2
-	fToolResOutput  uint16 = 3
-	fToolResIsError uint16 = 4
-	fToolResError   uint16 = 5
+	fToolResContent  uint16 = 1
+	fToolResDetail   uint16 = 2
+	fToolResOutput   uint16 = 3
+	fToolResIsError  uint16 = 4
+	fToolResError    uint16 = 5
+	fToolResExpanded uint16 = 6 // TUI tool row starts expanded
 
 	fIxReqEvent      uint16 = 1
 	fIxReqToolName   uint16 = 2
@@ -497,11 +498,12 @@ func DecodeToolInvoke(b []byte) (ToolInvoke, error) {
 
 // ToolResultMsg is ext→host tool outcome.
 type ToolResultMsg struct {
-	Content string
-	Detail  string
-	Output  string
-	IsError bool
-	Error   string
+	Content  string
+	Detail   string
+	Output   string
+	IsError  bool
+	Error    string
+	Expanded bool // TUI tool row starts expanded (user toggle still wins)
 }
 
 func EncodeToolResult(t ToolResultMsg) []byte {
@@ -511,6 +513,9 @@ func EncodeToolResult(t ToolResultMsg) []byte {
 	fw.PutString(fToolResOutput, t.Output)
 	fw.PutBool(fToolResIsError, t.IsError)
 	fw.PutString(fToolResError, t.Error)
+	if t.Expanded {
+		fw.PutBool(fToolResExpanded, true)
+	}
 	return fw.Bytes()
 }
 
@@ -537,6 +542,10 @@ func DecodeToolResult(b []byte) (ToolResultMsg, error) {
 		case fToolResError:
 			s, err := takeString(kind, fr)
 			t.Error = s
+			return err
+		case fToolResExpanded:
+			v, err := takeU64(kind, fr)
+			t.Expanded = v != 0
 			return err
 		default:
 			return fr.Skip(kind)
