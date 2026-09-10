@@ -542,7 +542,7 @@ func TestReplaySnapshotTools(t *testing.T) {
 	items := Project(snap)
 	require.Len(t, items, 3)
 	assert.Equal(t, ItemTool, items[2].Kind)
-	assert.Equal(t, "Read", items[2].ToolName)
+	assert.Equal(t, "Read", items[2].ToolRun.Name)
 	assert.Equal(t, "package main", items[2].ToolRun.Output)
 }
 
