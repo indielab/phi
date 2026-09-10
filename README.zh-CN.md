@@ -12,10 +12,11 @@
   <a href="https://github.com/pulseaiclub/phi/releases"><img src="https://img.shields.io/github/v/release/pulseaiclub/phi?style=flat&colorA=222222&colorB=8957E5" alt="Release"></a>
 </p>
 
-一个用 Go 编写的最小化终端编码代理框架（harness）——Pi 的姊妹项目。
+一个精简且性能出众的 Go 终端编码代理框架（harness）——Pi 的姊妹项目。
 
 **文档：** [pulseaiclub.github.io](https://pulseaiclub.github.io/)
 
+- **又快又小** — 发布二进制约 12 MB，空闲 RSS 约 21 MB，首帧约 40 ms；无 Node / Electron / Python 运行时
 - **子代理（Sub-agents）** — 拉起隔离任务，在 TUI / job 日志里完整看到执行过程，而不是把每一步都塞进父会话上下文
 - **Hashline 编辑** — 用整文件 `@file path#TAG` 加上行级 `LINE#HASH` 锚点改文件（思路对齐 [oh-my-pi](https://github.com/can1357/oh-my-pi)）：模型瞄锚点改，而不是整文件重写；TAG/哈希对不上就拒绝，避免过度编辑和静默写坏
 - **权限门控** — 危险工具先过 Gate / Ask；代理能碰你的代码树时，安全不是可选项
@@ -93,7 +94,7 @@ TUI 给模型提供四个核心工具——`read`、`write`、`edit` 和 `bash`�
 
 ## 资源占用
 
-phi 的目标是运行便宜、也便于动手改造。以下数据来自剥离的发布构建
+精简只是底线——phi 还要启动即开、负载下仍省内存。以下数据来自剥离的发布构建
 （`CGO_ENABLED=0`，`-ldflags="-s -w"`），除注明外均在 macOS arm64 上测得。
 
 | 指标 | phi |

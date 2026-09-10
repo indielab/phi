@@ -1,6 +1,6 @@
 # Phi
 
-Minimal Go terminal coding-agent harness. Layout: [doc/project-layout.md](doc/project-layout.md). Humans: [CONTRIBUTING.md](CONTRIBUTING.md).
+Lean, high-performance Go terminal coding-agent harness. Layout: [doc/project-layout.md](doc/project-layout.md). Humans: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Communication Preferences
 
@@ -16,7 +16,7 @@ Minimal Go terminal coding-agent harness. Layout: [doc/project-layout.md](doc/pr
 - **Sub-agent transcripts stay under `~/.phi/jobs/<id>/`.** Parent context gets the wait/task summary only. Child engines have no `agent_*` tools (no nesting). Default child role is explore (no write/edit; bash allowed except hard denies).
 - **UI split:** `internal/components` render; `internal/tui` wires the shell. Non-shell pieces live under `internal/tui/controller` (Engine/Bus/Msg), `internal/tui/transcript` (Mapper); version in `internal/version`. Keep widgets dumb.
 - **TUI assembly:** `cmd` constructs `controller.Bus` / `controller.Controller` / App and passes them into `editor.NewEditor(...)`, which builds the commands registry (`commands.NewBuiltinRegistry`). Do not hide `GetDefaultProject` inside `tui` constructors; do not return half-initialized Controllers (`engineErr` zombies). Prefer constructor parameters over `XxxDeps` bags.
-- **Stay lean.** Direct module deps are few on purpose. Don't add a dependency without a clear need.
+- **Stay lean and fast.** Direct module deps are few on purpose. Don't add a dependency without a clear need. Prefer changes that keep startup, idle RSS, and rebuild time small.
 - **Format with `make fmt`** (gofumpt / goimports / golines, 120 cols, local prefix `github.com/pulseaiclub/phi`). Don't hand-fight import groups.
 - **`testing` / `testify` stay in `*_test.go`.** `depguard` will fail the lint otherwise.
 - **Tests use testify** (`assert` / `require`) for assertions — no raw `t.Fatalf` checks.
