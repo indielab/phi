@@ -37,14 +37,14 @@ make install        # build and install into $GOBIN
 | ------------------------ | ---------------------------------------------------- |
 | `cmd/`                   | Entry points (`main.go`, bootstrap)                  |
 | `internal/agent/`        | Agent engine, executor, prompts, sessions            |
-| `internal/components/`   | TUI widgets (chat, input, palette, splash, …)        |
+| `internal/components/`   | TUI widgets (chat, input, palette, splash, diffview, …) |
 | `internal/llm/`          | LLM client, streaming accumulation, skill loading    |
 | `internal/project/`      | Project/workspace layout and config                  |
 | `internal/session/`      | Session persistence, load/apply, compaction          |
 | `internal/tools/`        | Agent tools (bash, read, edit, grep, find, …)        |
 | `internal/toolmanager/`  | External tool discovery/download                     |
 | `internal/tui/`          | Terminal UI wiring: controller, commands, keymaps    |
-| `internal/util/`         | Shared helpers (diff, retry, SSE, file search, …)    |
+| `internal/util/`         | Shared helpers (diff, retry, SSE, file search, diffreview, …) |
 | `internal/debuglog/`     | Debug logging                                        |
 
 Sessions are persisted per project directory under

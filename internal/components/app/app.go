@@ -208,16 +208,37 @@ func (a *App) handleEvent(ev xui.Event) (quit bool) {
 }
 
 func (a *App) dispatch(ctx *components.EventContext, ev xui.Event) {
-	// Capture → target → bubble (simplified: focused then root)
+	// Capture → target → bubble (simplified: focused then root).
+	// If the focused widget is no longer in the painted tree (full-screen
+	// overlay), drop it so keys don't keep going to a hidden ChatInput.
 	if a.focused != nil && a.focused != a.root {
-		a.focused.Handle(ctx, ev)
-		if ctx.Consume {
-			return
+		if !surfaceHasWidget(a.lastSurf, a.focused) {
+			a.focused = a.root
+		} else {
+			a.focused.Handle(ctx, ev)
+			if ctx.Consume {
+				return
+			}
 		}
 	}
 	if a.root != nil {
 		a.root.Handle(ctx, ev)
 	}
+}
+
+func surfaceHasWidget(s components.Surface, w components.Widget) bool {
+	if w == nil {
+		return false
+	}
+	if s.Widget == w {
+		return true
+	}
+	for _, ch := range s.Children {
+		if surfaceHasWidget(ch.Surface, w) {
+			return true
+		}
+	}
+	return false
 }
 
 // RequestFocus moves keyboard focus to w (nil = root). Safe from the UI goroutine.

@@ -95,6 +95,18 @@ func registerBuiltinCommands(r *CommandRegistry) {
 			return SkillsCommand(ctx.SkillPath, ctx.AddSkill)
 		},
 	})
+	r.Register(Command{
+		Name:        "diff",
+		Description: "Review git diff — /diff, /diff staged, /diff HEAD",
+		Slash:       true,
+		Insert:      "/diff ",
+		Run: func(ctx CommandContext) error {
+			if ctx.OpenDiff != nil {
+				ctx.OpenDiff(ctx.Args)
+			}
+			return nil
+		},
+	})
 }
 
 // modelSettingsCommand returns settings → model submenu.

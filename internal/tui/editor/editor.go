@@ -13,6 +13,7 @@ import (
 	"github.com/pulseaiclub/phi/internal/tui/commands"
 	"github.com/pulseaiclub/phi/internal/tui/composer"
 	"github.com/pulseaiclub/phi/internal/tui/controller"
+	"github.com/pulseaiclub/phi/internal/tui/diffpane"
 	"github.com/pulseaiclub/phi/internal/tui/footer"
 	"github.com/pulseaiclub/phi/internal/tui/overlays"
 	"github.com/pulseaiclub/phi/internal/tui/pathutil"
@@ -42,6 +43,7 @@ type Editor struct {
 	footer     *footer.FooterChrome
 	overlays   *overlays.Overlays
 	toast      toast.Toast
+	diff       *diffpane.Pane
 
 	ctrl *controller.EngineController
 
@@ -154,6 +156,17 @@ func NewEditor(
 	e.composer.SetListPickHandler(func(item listpicker.Item) {
 		e.sessions.Accept(item.ID)
 	})
+	e.diff = diffpane.New(e.theme, cwd,
+		func(text string) {
+			e.Publish(controller.SubmitMsg{Text: text})
+		},
+		func(text string) bool {
+			return e.vx != nil && e.vx.CopyToClipboard(text) == nil
+		},
+		func(msg string) {
+			e.Publish(controller.ToastMsg{Message: msg, Kind: toast.ToastSuccess, Duration: 2 * time.Second})
+		},
+	)
 	bridge = newCommandBridge(
 		e.bus,
 		e.composer,
@@ -163,6 +176,9 @@ func NewEditor(
 		e.extCmds,
 		e.modelNames,
 		e.skillPath,
+		func(args []string) {
+			e.openDiff(args)
+		},
 	)
 	e.extCmds.CommandCtx = bridge.context
 	e.composer.Wire(
@@ -178,7 +194,7 @@ func NewEditor(
 			}
 		},
 		func() bool { return e.ctrl != nil && e.ctrl.ImageEnabled() },
-		e.overlays.BlocksComposer,
+		e.blocksComposer,
 		e.overlays.HandlePermissionKey,
 		e.overlays.HandleContinueKey,
 		e.overlays.HandleConfirmKey,
@@ -279,7 +295,44 @@ func (e *Editor) drainBus() {
 	}
 }
 
+func (e *Editor) blocksComposer() bool {
+	if e.overlays != nil && e.overlays.BlocksComposer() {
+		return true
+	}
+	return e.diff != nil && e.diff.Active()
+}
+
+func (e *Editor) openDiff(args []string) {
+	if e.diff == nil {
+		return
+	}
+	e.diff.OpenGit(e.cwd, args)
+	e.captureDiffFocus()
+}
+
+func (e *Editor) captureDiffFocus() {
+	if e.App != nil {
+		e.App.RequestFocus(e)
+	}
+	if e.composer != nil {
+		e.composer.HideCompleters()
+		e.composer.HidePalette()
+	}
+}
+
 func (e *Editor) Handle(ctx *components.EventContext, ev xui.Event) {
+	if ke, ok := ev.(xui.KeyEvent); ok && ke.CtrlC() {
+		e.composer.Handle(ctx, ev)
+		return
+	}
+	if e.diff != nil && e.diff.Active() {
+		e.captureDiffFocus()
+		e.diff.Handle(ctx, ev)
+		if !e.diff.Active() && e.composer != nil {
+			e.composer.FocusChat()
+		}
+		return
+	}
 	e.composer.Handle(ctx, ev)
 }
 
@@ -295,6 +348,23 @@ func (e *Editor) Draw(ctx components.DrawContext) components.Surface {
 		e.footer.AdvanceTick()
 	}
 	_ = e.toast.Visible()
+
+	if e.diff != nil && e.diff.Active() {
+		// Palette/slash leave keyboard focus on Chat; steal it back so keys
+		// don't land in the composer under the overlay.
+		e.captureDiffFocus()
+		root := e.diff.Draw(ctx)
+		root.Widget = e
+		if e.toast.Visible() {
+			toastSurf := e.toast.Draw(ctx)
+			root.Children = append(root.Children, components.SubSurface{
+				Origin:  components.Point{X: 0, Y: 0},
+				Surface: toastSurf,
+				Z:       40,
+			})
+		}
+		return root
+	}
 
 	maxSize := ctx.Max
 	root := components.Surface{Size: maxSize, Widget: e}
@@ -419,6 +489,9 @@ func (e *Editor) applyTheme(name string) {
 	e.transcript.SetTheme(th)
 	e.footer.SetTheme(th)
 	e.overlays.SetTheme(th)
+	if e.diff != nil {
+		e.diff.SetTheme(th)
+	}
 	e.toast.Show("Theme: "+name, toast.ToastSuccess, 2*time.Second)
 	if e.vx != nil {
 		e.vx.QueueRefresh()

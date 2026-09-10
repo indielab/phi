@@ -22,6 +22,7 @@ type commandBridge struct {
 
 	modelNames []string
 	skillPath  string
+	openDiff   func(args []string)
 }
 
 func newCommandBridge(
@@ -33,6 +34,7 @@ func newCommandBridge(
 	extCmds *commands.ExtCommands,
 	modelNames []string,
 	skillPath string,
+	openDiff func(args []string),
 ) *commandBridge {
 	return &commandBridge{
 		bus:        bus,
@@ -43,6 +45,7 @@ func newCommandBridge(
 		extCmds:    extCmds,
 		modelNames: append([]string(nil), modelNames...),
 		skillPath:  skillPath,
+		openDiff:   openDiff,
 	}
 }
 
@@ -72,6 +75,7 @@ func (b *commandBridge) context() commands.CommandContext {
 		ReloadExtensions: b.reloadExtensions,
 		ListExtensions:   b.listExtensions,
 		AddSkill:         b.addSkill,
+		OpenDiff:         b.openDiff,
 		ModelNames:       b.modelNames,
 		SkillPath:        b.skillPath,
 	}
