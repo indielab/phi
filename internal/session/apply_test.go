@@ -117,7 +117,7 @@ func TestProjectOrder(t *testing.T) {
 		items[2].Kind != ItemAssistant || items[3].Kind != ItemTool {
 		t.Fatalf("order: %+v", items)
 	}
-	if items[3].ToolRun.Status != ToolDone || items[3].ToolRun.Output != "a\n" {
+	if items[3].ToolRun.Status != ToolDone || items[3].ToolRun.Output != "a\n" || items[3].ToolRun.Name != "Bash" {
 		t.Fatalf("tool item: %+v", items[3])
 	}
 }
@@ -171,7 +171,7 @@ func TestLocalBash(t *testing.T) {
 	}
 
 	items := Project(s)
-	if len(items) != 1 || items[0].Kind != ItemTool || items[0].ToolName != "bash" {
+	if len(items) != 1 || items[0].Kind != ItemTool || items[0].ToolRun.Name != "bash" {
 		t.Fatalf("project: %+v", items)
 	}
 

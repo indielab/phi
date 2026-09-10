@@ -29,10 +29,7 @@ type Item struct {
 	Streaming   bool
 	Interrupted bool
 
-	ToolName  string
-	ToolInput string
-	ToolUseID string
-	ToolRun   ToolRun
+	ToolRun ToolRun
 }
 
 // Project flattens Snapshot into list items in content order:
@@ -58,23 +55,16 @@ func Project(s Snapshot) []Item {
 				Text: "Compacted",
 			})
 		case RoleLocalBash:
-			run := ToolRun{ToolUseID: m.ID, Name: "bash", Status: ToolInProgress, Detail: m.Text, Local: true}
-			if s.Tools != nil {
-				if tr, ok := s.Tools[m.ID]; ok {
-					run = tr
-					if run.Detail == "" {
-						run.Detail = m.Text
-					}
-					run.Local = true
-				}
-			}
 			items = append(items, Item{
-				ID:        "bash-" + m.ID,
-				Kind:      ItemTool,
-				ToolUseID: m.ID,
-				ToolName:  "bash",
-				ToolInput: m.Text,
-				ToolRun:   run,
+				ID:   "bash-" + m.ID,
+				Kind: ItemTool,
+				ToolRun: mergeToolRun(ToolRun{
+					ToolUseID: m.ID,
+					Name:      "bash",
+					Status:    ToolInProgress,
+					Detail:    m.Text,
+					Local:     true,
+				}, s.Tools),
 			})
 		}
 	}
@@ -125,22 +115,15 @@ func projectAssistant(m Message, tools map[string]ToolRun) []Item {
 		case BlockToolUse:
 			emitText(textBuf.String(), false)
 			textBuf.Reset()
-			run := ToolRun{ToolUseID: b.ID, Name: b.Name, Status: ToolInProgress, Detail: b.Input}
-			if tools != nil {
-				if tr, ok := tools[b.ID]; ok {
-					run = tr
-					if run.Detail == "" {
-						run.Detail = b.Input
-					}
-				}
-			}
 			items = append(items, Item{
-				ID:        "tool-" + b.ID,
-				Kind:      ItemTool,
-				ToolUseID: b.ID,
-				ToolName:  b.Name,
-				ToolInput: b.Input,
-				ToolRun:   run,
+				ID:   "tool-" + b.ID,
+				Kind: ItemTool,
+				ToolRun: mergeToolRun(ToolRun{
+					ToolUseID: b.ID,
+					Name:      b.Name,
+					Status:    ToolInProgress,
+					Detail:    b.Input,
+				}, tools),
 			})
 		}
 	}
@@ -161,6 +144,32 @@ func projectAssistant(m Message, tools map[string]ToolRun) []Item {
 		}
 	}
 	return items
+}
+
+// mergeToolRun overlays live execution state onto the content-block fallback
+// so the projected row always has Name / ToolUseID / Detail even when the
+// live run omitted them.
+func mergeToolRun(fallback ToolRun, live map[string]ToolRun) ToolRun {
+	if live == nil {
+		return fallback
+	}
+	tr, ok := live[fallback.ToolUseID]
+	if !ok {
+		return fallback
+	}
+	if tr.Name == "" {
+		tr.Name = fallback.Name
+	}
+	if tr.Detail == "" {
+		tr.Detail = fallback.Detail
+	}
+	if tr.ToolUseID == "" {
+		tr.ToolUseID = fallback.ToolUseID
+	}
+	if fallback.Local {
+		tr.Local = true
+	}
+	return tr
 }
 
 func isTrailingThinking(blocks []ContentBlock, i int) bool {
