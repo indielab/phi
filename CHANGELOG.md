@@ -10,6 +10,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- Extensions: `ToolResult.Expanded` opens the TUI tool row by default (e.g. plan
+  body). User toggle still wins after the first interaction.
+
 ### Changed
 
 ### Deprecated

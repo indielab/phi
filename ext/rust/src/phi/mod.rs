@@ -148,6 +148,8 @@ pub struct ToolResult {
     pub content: String,
     pub detail: String,
     pub output: String,
+    /// Ask the TUI to start the tool row open (user toggle still wins).
+    pub expanded: bool,
 }
 
 /// A slash command. The handler receives the raw argument string and a
@@ -626,6 +628,7 @@ fn serve_tool(
                 content: res.content,
                 detail: res.detail,
                 output: res.output,
+                expanded: res.expanded,
                 ..Default::default()
             },
             Err(e) => tool_error(e),

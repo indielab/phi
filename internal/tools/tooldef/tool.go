@@ -15,6 +15,8 @@ type Result struct {
 	Detail string
 	// Output is the display body for the TUI (may equal Content).
 	Output string
+	// Expanded asks the TUI to start the tool row open.
+	Expanded bool
 }
 
 // Handler runs a tool given raw JSON arguments.

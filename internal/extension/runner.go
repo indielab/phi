@@ -293,7 +293,7 @@ func toolFromDef(def ext.Tool) tools.Tool {
 			if out == "" {
 				out = res.Content
 			}
-			return tools.Result{Content: res.Content, Detail: res.Detail, Output: out}, nil
+			return tools.Result{Content: res.Content, Detail: res.Detail, Output: out, Expanded: res.Expanded}, nil
 		},
 	}
 }

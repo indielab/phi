@@ -141,6 +141,7 @@ type ToolRun struct {
 	Detail    string // optional one-line detail (path, cmd summary)
 	ExitCode  int    // set when a local bash run finishes (Status Done/Error)
 	Local     bool   // user "!cmd" bash; ignored by agent streaming/busy checks
+	Expanded  bool   // TUI starts the tool row open (user toggle still wins)
 }
 
 // Message is one session message. Assistant rows carry Content blocks and State.

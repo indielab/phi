@@ -103,6 +103,9 @@ func Apply(s Snapshot, ev Event) Snapshot {
 			if prev.Local {
 				run.Local = true
 			}
+			if prev.Expanded {
+				run.Expanded = true
+			}
 		}
 		out.Tools[run.ToolUseID] = run
 	case CancelStreaming:

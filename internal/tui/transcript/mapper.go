@@ -166,8 +166,8 @@ func (m *Mapper) patchTool(w components.Widget, it session.Item) (ok, dirty bool
 		b.Theme = m.theme
 		if exp, ok := m.expanded[it.ID]; ok {
 			b.Expanded = exp
-		} else if run.Local {
-			// User "!cmd" results should stay open so output is visible.
+		} else if run.Local || run.Expanded {
+			// User "!cmd" / plugin Expanded: keep body visible.
 			b.Expanded = true
 		} else if b.Status == status.ToolRunning && b.Output != "" {
 			b.Expanded = true
@@ -214,6 +214,8 @@ func (m *Mapper) patchTool(w components.Widget, it session.Item) (ok, dirty bool
 	t.Spinner = m.spinner
 	if exp, ok := m.expanded[it.ID]; ok {
 		t.Expanded = exp
+	} else if run.Expanded {
+		t.Expanded = true
 	} else if t.Status == status.ToolRunning && t.Output != "" {
 		t.Expanded = true
 	}
@@ -279,7 +281,7 @@ func (m *Mapper) toolWidget(it session.Item, exp bool) components.Widget {
 	run := it.ToolRun
 	autoExp := exp
 	if !exp {
-		if run.Local {
+		if run.Local || run.Expanded {
 			autoExp = true
 		} else if run.Status == session.ToolInProgress && run.Output != "" {
 			autoExp = true
