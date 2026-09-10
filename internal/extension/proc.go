@@ -389,7 +389,8 @@ func (p *Proc) CallTool(ctx context.Context, name string, args json.RawMessage) 
 		if tr.Error == "" {
 			tr.Error = tr.Content
 		}
-		return ext.ToolResult{Content: tr.Content, Detail: tr.Detail, Output: tr.Output, Expanded: tr.Expanded}, errors.New(tr.Error)
+		res := ext.ToolResult{Content: tr.Content, Detail: tr.Detail, Output: tr.Output, Expanded: tr.Expanded}
+		return res, errors.New(tr.Error)
 	}
 	return ext.ToolResult{Content: tr.Content, Detail: tr.Detail, Output: tr.Output, Expanded: tr.Expanded}, nil
 }
