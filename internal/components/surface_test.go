@@ -3,6 +3,8 @@ package components
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/xui"
 )
 
@@ -20,20 +22,21 @@ func TestSurfaceRenderWideCharAfterFill(t *testing.T) {
 	s.Print(0, 0, "中文", xui.Style{}, xui.WidthUnicode)
 	s.Render(win)
 
-	if got := screen.GetCell(0, 0); got.Char != "中" || got.Width != 2 {
-		t.Fatalf("cell0 = %+v, want 中 width 2", got)
-	}
+	cell0 := screen.GetCell(0, 0)
+	require.Equal(t, "中", cell0.Char, "cell0 char")
+	require.Equal(t, uint8(2), cell0.Width, "cell0 width")
 	// Column 1 is the wide-char trail owned by screen.SetCell — not a second glyph.
-	if got := screen.GetCell(1, 0); got.Char != " " || got.Width != 1 || !got.Trail {
-		t.Fatalf("cell1 continuation = %+v", got)
-	}
-	if got := screen.GetCell(2, 0); got.Char != "文" || got.Width != 2 {
-		t.Fatalf("cell2 = %+v, want 文 width 2", got)
-	}
+	cell1 := screen.GetCell(1, 0)
+	require.Equal(t, " ", cell1.Char, "cell1 char")
+	require.Equal(t, uint8(1), cell1.Width, "cell1 width")
+	require.True(t, cell1.Trail, "cell1 trail")
+	cell2 := screen.GetCell(2, 0)
+	require.Equal(t, "文", cell2.Char, "cell2 char")
+	require.Equal(t, uint8(2), cell2.Width, "cell2 width")
 	// No gap: column 1 must not be an independent printable CJK / reverse block.
-	if screen.GetCell(1, 0).Char == "中" || screen.GetCell(1, 0).Char == "文" {
-		t.Fatal("continuation column overwritten with a real glyph")
-	}
+	c1Char := screen.GetCell(1, 0).Char
+	require.NotEqual(t, "中", c1Char, "continuation column overwritten with a real glyph")
+	require.NotEqual(t, "文", c1Char, "continuation column overwritten with a real glyph")
 }
 
 // TestSurfaceRenderClipsChildren ensures scrolled content cannot paint past the parent box
@@ -67,23 +70,15 @@ func TestSurfaceRenderClipsChildren(t *testing.T) {
 	root.Render(win)
 
 	// Visible list rows: leak rows 1..2 → BBBB, CCCC at screen y=0,1
-	if screen.GetCell(0, 0).Char != "B" {
-		t.Fatalf("y0 want B got %q", screen.GetCell(0, 0).Char)
-	}
-	if screen.GetCell(0, 1).Char != "C" {
-		t.Fatalf("y1 want C got %q", screen.GetCell(0, 1).Char)
-	}
+	require.Equal(t, "B", screen.GetCell(0, 0).Char, "y0")
+	require.Equal(t, "C", screen.GetCell(0, 1).Char, "y1")
 	// DDDD would be at list-local y=3 which is outside list height 3 — must not leak into tui.
 	for y := 3; y < 8; y++ {
 		ch := screen.GetCell(0, y).Char
-		if ch == "D" {
-			t.Fatalf("leaked D into row %d", y)
-		}
+		require.NotEqual(t, "D", ch, "leaked D into row %d", y)
 	}
 	// AAAA was above the clip (Y=-1) — must not appear.
 	for y := range 8 {
-		if screen.GetCell(0, y).Char == "A" {
-			t.Fatalf("leaked A at row %d", y)
-		}
+		require.NotEqual(t, "A", screen.GetCell(0, y).Char, "leaked A at row %d", y)
 	}
 }

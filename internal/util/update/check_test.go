@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/phi/internal/util/update"
 )
 
@@ -22,23 +24,18 @@ func TestCheckUsesCacheWhenAvailable(t *testing.T) {
 		"latest":     "v0.2.0",
 		"url":        "https://example.com/releases/tag/v0.2.0",
 	})
-	if err := os.WriteFile(cache, payload, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(cache, payload, 0o600))
 
 	info := update.Check(t.Context(), update.CheckOptions{
 		Current:  "v0.1.0",
 		CacheDir: dir,
 	})
-	if !info.Available || info.Latest != "v0.2.0" {
-		t.Fatalf("expected cached update, got %+v", info)
-	}
+	require.True(t, info.Available, "expected cached update, got %+v", info)
+	require.Equal(t, "v0.2.0", info.Latest)
 }
 
 func TestSkipCheckEnv(t *testing.T) {
 	t.Setenv("PHI_SKIP_VERSION_CHECK", "1")
 	info := update.Check(t.Context(), update.CheckOptions{Current: "v0.1.0"})
-	if info.Available {
-		t.Fatalf("expected skip, got %+v", info)
-	}
+	require.False(t, info.Available, "expected skip, got %+v", info)
 }

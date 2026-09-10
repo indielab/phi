@@ -1,8 +1,10 @@
 package mcptool_test
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pulseaiclub/phi/internal/mcp"
 	"github.com/pulseaiclub/phi/internal/tools/mcptool"
@@ -14,24 +16,18 @@ func TestMCPToolsRegister(t *testing.T) {
 		"echo": {Command: []string{"true"}},
 	})
 	tools := mcptool.Tools(pool)
-	if len(tools) != 3 {
-		t.Fatalf("tools = %d", len(tools))
-	}
+	require.Len(t, tools, 3)
 	byName := map[string]bool{}
 	for _, tool := range tools {
 		byName[tool.Definition.Name] = true
 	}
 	for _, name := range []string{"mcp_list", "mcp_inspect", "mcp_call"} {
-		if !byName[name] {
-			t.Fatalf("missing %s", name)
-		}
+		assert.True(t, byName[name], "missing %s", name)
 	}
 }
 
 func TestMCPToolsNilPool(t *testing.T) {
-	if mcptool.Tools(nil) != nil {
-		t.Fatal("expected nil")
-	}
+	require.Nil(t, mcptool.Tools(nil))
 }
 
 func TestMCPListRequiresServer(t *testing.T) {
@@ -40,13 +36,11 @@ func TestMCPListRequiresServer(t *testing.T) {
 	})
 	list := findTool(t, mcptool.Tools(pool), "mcp_list")
 	req := list.Definition.Params.Required
-	if len(req) != 1 || req[0] != "server" {
-		t.Fatalf("Required = %v, want [server]", req)
-	}
+	require.Len(t, req, 1)
+	require.Equal(t, "server", req[0])
 	_, err := list.Run(t.Context(), []byte(`{}`))
-	if err == nil || !strings.Contains(err.Error(), "server is required") {
-		t.Fatalf("err = %v, want server is required", err)
-	}
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "server is required")
 }
 
 func findTool(t *testing.T, tools []tooldef.Tool, name string) tooldef.Tool {
@@ -56,6 +50,6 @@ func findTool(t *testing.T, tools []tooldef.Tool, name string) tooldef.Tool {
 			return tool
 		}
 	}
-	t.Fatalf("missing %s", name)
+	require.Failf(t, "tool not found", "missing %s", name)
 	return tooldef.Tool{}
 }

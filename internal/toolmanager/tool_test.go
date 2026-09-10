@@ -1,8 +1,9 @@
 package toolmanager
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestAssetNameCandidates(t *testing.T) {
@@ -61,9 +62,7 @@ func TestAssetNameCandidates(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := Tools[tt.tool].AssetNames.getAssetNames(tt.version, tt.platform, tt.arch)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("getAssetNames() = %q, want %q", got, tt.want)
-			}
+			require.Equal(t, tt.want, got, "getAssetNames()")
 		})
 	}
 }

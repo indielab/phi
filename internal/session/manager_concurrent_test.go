@@ -5,6 +5,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/phi/internal/llm"
 )
 
@@ -12,9 +15,7 @@ import (
 // must not race or corrupt the tree. Run with -race.
 func TestManagerConcurrentAccess(t *testing.T) {
 	m, err := NewSessionManager(t.TempDir(), WithShouldFlush(false))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	var wg sync.WaitGroup
 	for w := range 8 {
@@ -27,8 +28,8 @@ func TestManagerConcurrentAccess(t *testing.T) {
 					Content: fmt.Sprintf("w%d-%d", w, i),
 				}
 				id, err := m.Append(msg)
+				assert.NoError(t, err)
 				if err != nil {
-					t.Errorf("append: %v", err)
 					return
 				}
 				_ = m.BuildContext()
@@ -39,7 +40,5 @@ func TestManagerConcurrentAccess(t *testing.T) {
 	}
 	wg.Wait()
 
-	if m.Len() < 8*50 {
-		t.Fatalf("expected >= %d entries, got %d", 8*50, m.Len())
-	}
+	require.GreaterOrEqual(t, m.Len(), 8*50)
 }

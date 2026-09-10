@@ -1,6 +1,10 @@
 package chat
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestActiveMention(t *testing.T) {
 	tests := []struct {
@@ -26,16 +30,13 @@ func TestActiveMention(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			q, start, end, ok := ActiveMention(tt.value, tt.cursor)
-			if ok != tt.ok {
-				t.Fatalf("ok=%v want %v (q=%q)", ok, tt.ok, q)
-			}
+			require.Equal(t, tt.ok, ok, "q=%q", q)
 			if !ok {
 				return
 			}
-			if q != tt.query || start != tt.start || end != tt.cursor {
-				t.Fatalf("q=%q start=%d end=%d want q=%q start=%d end=%d",
-					q, start, end, tt.query, tt.start, tt.cursor)
-			}
+			require.Equal(t, tt.query, q, "query")
+			require.Equal(t, tt.start, start, "start")
+			require.Equal(t, tt.cursor, end, "end")
 		})
 	}
 }
@@ -43,10 +44,6 @@ func TestActiveMention(t *testing.T) {
 func TestReplaceRange(t *testing.T) {
 	c := &ChatInput{Value: "see @man", Cursor: 8}
 	c.ReplaceRange(4, 8, "@internal/session/manager.go")
-	if c.Value != "see @internal/session/manager.go" {
-		t.Fatalf("value=%q", c.Value)
-	}
-	if c.Cursor != len(c.Value) {
-		t.Fatalf("cursor=%d", c.Cursor)
-	}
+	require.Equal(t, "see @internal/session/manager.go", c.Value)
+	require.Equal(t, len(c.Value), c.Cursor)
 }

@@ -4,14 +4,14 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestBashOutputFormattingPreservesShortOutput(t *testing.T) {
 	in := "a\nb\nc\n"
 	got := formatBashOutput(in, false)
-	if got != in {
-		t.Fatalf("short output changed: %q", got)
-	}
+	require.Equal(t, in, got, "short output changed")
 }
 
 func TestBashOutputFormattingWritesTemp(t *testing.T) {
@@ -21,23 +21,15 @@ func TestBashOutputFormattingWritesTemp(t *testing.T) {
 	}
 	full := b.String()
 	got := formatBashOutput(full, false)
-	if !strings.Contains(got, "Full output:") {
-		t.Fatalf("missing full-output notice: %q", got)
-	}
-	if !strings.Contains(got, "Showing lines") {
-		t.Fatalf("missing range notice: %q", got)
-	}
+	require.Contains(t, got, "Full output:", "missing full-output notice")
+	require.Contains(t, got, "Showing lines", "missing range notice")
 	// Extract path and confirm file exists with full content.
 	_, rest, _ := strings.Cut(got, "Full output: ")
 	path := strings.TrimSpace(strings.Split(rest, "]")[0])
 	t.Cleanup(func() { _ = os.Remove(path) })
 	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != full {
-		t.Fatalf("temp file content mismatch: got %d bytes want %d", len(data), len(full))
-	}
+	require.NoError(t, err)
+	require.Equal(t, full, string(data), "temp file content mismatch")
 }
 
 func TestFormatCollectedBashOutputLabelsRetainedFile(t *testing.T) {
@@ -48,46 +40,28 @@ func TestFormatCollectedBashOutputLabelsRetainedFile(t *testing.T) {
 	retained := b.String()
 
 	got := formatBashOutput(retained, true)
-	if !strings.Contains(got, "Retained output:") {
-		t.Fatalf("missing retained-output notice: %q", got)
-	}
-	if strings.Contains(got, "Full output:") {
-		t.Fatalf("collection-truncated output mislabeled as full: %q", got)
-	}
-	if !strings.Contains(got, "Showing lines 21-1020 of 1020") {
-		t.Fatalf("collection notice changed real line range: %q", got)
-	}
-	if !strings.HasSuffix(got, collectTruncationNote) {
-		t.Fatalf("missing collection truncation note: %q", got)
-	}
+	require.Contains(t, got, "Retained output:", "missing retained-output notice")
+	require.NotContains(t, got, "Full output:", "collection-truncated output mislabeled as full")
+	require.Contains(t, got, "Showing lines 21-1020 of 1020", "collection notice changed real line range")
+	require.True(t, strings.HasSuffix(got, collectTruncationNote), "missing collection truncation note")
 	_, rest, _ := strings.Cut(got, "Retained output: ")
 	path := strings.TrimSpace(strings.Split(rest, "]")[0])
-	if path == "" {
-		t.Fatal("missing retained output path")
-	}
+	require.NotEmpty(t, path, "missing retained output path")
 	t.Cleanup(func() { _ = os.Remove(path) })
 	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != retained {
-		t.Fatalf("retained file contains display metadata: got %d bytes want %d", len(data), len(retained))
-	}
+	require.NoError(t, err)
+	require.Equal(t, retained, string(data), "retained file contains display metadata")
 }
 
 func TestCollectionNoticeDoesNotConsumeDisplayBudget(t *testing.T) {
 	output := strings.Repeat("x", BashMaxOutputBytes)
 	got := formatBashOutput(output, true)
-	if got != output+collectTruncationNote {
-		t.Fatalf(
-			"collection notice altered output at display limit: got %d bytes want %d",
-			len(got),
-			len(output)+len(collectTruncationNote),
-		)
-	}
-	if strings.Contains(got, "Retained output:") || strings.Contains(got, "Showing lines") {
-		t.Fatalf("collection notice caused an unnecessary temp dump: %q", got[len(output):])
-	}
+	require.Equal(t, output+collectTruncationNote, got, "collection notice altered output at display limit")
+	require.False(
+		t,
+		strings.Contains(got, "Retained output:") || strings.Contains(got, "Showing lines"),
+		"collection notice caused an unnecessary temp dump",
+	)
 }
 
 func TestTruncateBashTailPreservesTailSemantics(t *testing.T) {
@@ -136,16 +110,16 @@ func TestTruncateBashTailPreservesTailSemantics(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			display, path := truncateBashTail(tc.output, tc.maxLines, tc.maxBytes, "Full output")
-			if path == "" {
-				t.Fatal("missing temp output path")
-			}
+			require.NotEmpty(t, path, "missing temp output path")
 			t.Cleanup(func() { _ = os.Remove(path) })
-			if !strings.HasPrefix(display, tc.wantTail+"\n\n[") {
-				t.Fatalf("display tail=%q, want prefix %q", display, tc.wantTail)
-			}
-			if !strings.Contains(display, tc.wantRange) {
-				t.Fatalf("display=%q, want range %q", display, tc.wantRange)
-			}
+			require.True(
+				t,
+				strings.HasPrefix(display, tc.wantTail+"\n\n["),
+				"display tail=%q, want prefix %q",
+				display,
+				tc.wantTail,
+			)
+			require.Contains(t, display, tc.wantRange, "display=%q, want range %q", display, tc.wantRange)
 		})
 	}
 }

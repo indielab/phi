@@ -3,6 +3,8 @@ package chat
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestActiveSlash(t *testing.T) {
@@ -27,21 +29,14 @@ func TestActiveSlash(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			q, start, end, ok := ActiveSlash(tt.value, tt.cursor)
-			if ok != tt.ok {
-				t.Fatalf("ok=%v want %v", ok, tt.ok)
-			}
+			require.Equal(t, tt.ok, ok)
 			if !ok {
 				return
 			}
-			if q != tt.query {
-				t.Fatalf("query=%q want %q", q, tt.query)
-			}
-			if start != 0 || end != tt.cursor {
-				t.Fatalf("range=[%d,%d) want [0,%d)", start, end, tt.cursor)
-			}
-			if !strings.HasPrefix(tt.value, "/") {
-				t.Fatal("expected slash prefix")
-			}
+			require.Equal(t, tt.query, q)
+			require.Equal(t, 0, start, "start")
+			require.Equal(t, tt.cursor, end, "end")
+			require.True(t, strings.HasPrefix(tt.value, "/"), "expected slash prefix")
 		})
 	}
 }

@@ -145,9 +145,7 @@ func TestProcessStreamTextAndUsage(t *testing.T) {
 	var text strings.Builder
 	var done *llm.StreamEvent
 	for _, ev := range events {
-		if ev.Type == llm.StreamEventTypeError {
-			t.Fatalf("stream error: %s", ev.Err)
-		}
+		require.NotEqual(t, llm.StreamEventTypeError, ev.Type, "stream error: %s", ev.Err)
 		switch ev.Type {
 		case llm.StreamEventTypeDelta:
 			text.WriteString(ev.Delta.Content)
@@ -178,9 +176,7 @@ func TestProcessStreamThinking(t *testing.T) {
 	var text, reasoning strings.Builder
 	var done *llm.StreamEvent
 	for _, ev := range events {
-		if ev.Type == llm.StreamEventTypeError {
-			t.Fatalf("stream error: %s", ev.Err)
-		}
+		require.NotEqual(t, llm.StreamEventTypeError, ev.Type, "stream error: %s", ev.Err)
 		switch ev.Type {
 		case llm.StreamEventTypeDelta:
 			text.WriteString(ev.Delta.Content)

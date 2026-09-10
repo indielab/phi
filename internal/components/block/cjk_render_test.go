@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/xui"
 
 	"github.com/pulseaiclub/phi/internal/components"
@@ -29,9 +31,7 @@ func TestCJKSampleNoBlankGapsAfterClearRender(t *testing.T) {
 
 	txt := components.SurfaceText(s)
 	for _, want := range []string{"翻出几篇你满意的", "把每次", "笔记"} {
-		if !strings.Contains(txt, want) {
-			t.Fatalf("surface missing %q", want)
-		}
+		require.Contains(t, txt, want, "surface missing %q", want)
 	}
 
 	var b strings.Builder
@@ -50,15 +50,11 @@ func TestCJKSampleNoBlankGapsAfterClearRender(t *testing.T) {
 	}
 	got := b.String()
 	for _, want := range []string{"翻出几篇你满意的", "把每次"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("screen missing %q\n%s", want, got)
-		}
+		require.Contains(t, got, want, "screen missing %q\n%s", want, got)
 	}
 
 	screen.MarkRefresh()
 	for _, d := range screen.Diff() {
-		if d.Cell.Trail {
-			t.Fatalf("Diff emitted Trail at (%d,%d)", d.X, d.Y)
-		}
+		require.False(t, d.Cell.Trail, "Diff emitted Trail at (%d,%d)", d.X, d.Y)
 	}
 }

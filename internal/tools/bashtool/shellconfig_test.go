@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/phi/internal/tools/tooldef"
 )
 
@@ -15,9 +18,7 @@ func TestIsLegacyWslBashPath(t *testing.T) {
 		`c:\windows\system32\bash.exe`,
 		`C:/Windows/Sysnative/bash.exe`,
 	} {
-		if !isLegacyWslBashPath(p) {
-			t.Errorf("want WSL shim for %q", p)
-		}
+		assert.True(t, isLegacyWslBashPath(p), "want WSL shim for %q", p)
 	}
 	for _, p := range []string{
 		`C:\Program Files\Git\bin\bash.exe`,
@@ -25,33 +26,28 @@ func TestIsLegacyWslBashPath(t *testing.T) {
 		`/bin/bash`,
 		`C:\Windows\System32\wsl.exe`,
 	} {
-		if isLegacyWslBashPath(p) {
-			t.Errorf("not a WSL shim for %q", p)
-		}
+		assert.False(t, isLegacyWslBashPath(p), "not a WSL shim for %q", p)
 	}
 }
 
 func TestConfigForShell(t *testing.T) {
 	cfg := configForShell(`C:\Program Files\Git\bin\bash.exe`)
-	if cfg.stdinMode || len(cfg.args) != 1 || cfg.args[0] != "-c" {
-		t.Fatalf("git bash config: %+v", cfg)
-	}
+	require.False(t, cfg.stdinMode, "git bash should not use stdin mode")
+	require.Len(t, cfg.args, 1)
+	require.Equal(t, "-c", cfg.args[0])
+
 	cfg = configForShell(`C:\Windows\System32\bash.exe`)
-	if !cfg.stdinMode || len(cfg.args) != 1 || cfg.args[0] != "-s" {
-		t.Fatalf("WSL shim must use stdin transport: %+v", cfg)
-	}
+	require.True(t, cfg.stdinMode, "WSL shim must use stdin transport")
+	require.Len(t, cfg.args, 1)
+	require.Equal(t, "-s", cfg.args[0])
 }
 
 func TestResolveShellConfig(t *testing.T) {
 	cfg, err := resolveShellConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.shell == "" {
-		t.Fatal("empty shell")
-	}
-	if runtime.GOOS == "windows" && !cfg.stdinMode && (len(cfg.args) != 1 || cfg.args[0] != "-c") {
-		t.Fatalf("windows config: %+v", cfg)
+	require.NoError(t, err)
+	require.NotEmpty(t, cfg.shell, "empty shell")
+	if runtime.GOOS == "windows" {
+		require.False(t, !cfg.stdinMode && (len(cfg.args) != 1 || cfg.args[0] != "-c"), "windows config: %+v", cfg)
 	}
 }
 
@@ -59,56 +55,37 @@ func TestPrependPathEntry(t *testing.T) {
 	sep := string(os.PathListSeparator)
 	got := prependPathEntry([]string{"PATH=/usr/bin" + sep + "/bin"}, "/x/bin")
 	want := "PATH=/x/bin" + sep + "/usr/bin" + sep + "/bin"
-	if got[0] != want {
-		t.Fatalf("got %q, want %q", got[0], want)
-	}
+	require.Equal(t, want, got[0])
 
 	// Already present → unchanged.
 	existing := "PATH=/usr/bin" + sep + "/x/bin"
 	got = prependPathEntry([]string{existing}, "/x/bin")
-	if len(got) != 1 || got[0] != existing {
-		t.Fatalf("expected unchanged, got %v", got)
-	}
+	require.Len(t, got, 1)
+	require.Equal(t, existing, got[0])
 
 	// Windows-style key casing is matched case-insensitively.
 	got = prependPathEntry([]string{"Path=C:\\Windows"}, `C:\Phi\bin`)
-	if !strings.HasPrefix(got[0], "Path=") || !strings.Contains(got[0], `C:\Phi\bin`) {
-		t.Fatalf("got %q", got[0])
-	}
+	require.True(t, strings.HasPrefix(got[0], "Path="))
+	require.Contains(t, got[0], `C:\Phi\bin`)
 
 	// No PATH entry → appended.
 	got = prependPathEntry([]string{"HOME=/home/x"}, "/x/bin")
-	if len(got) != 2 || got[1] != "PATH=/x/bin" {
-		t.Fatalf("got %v", got)
-	}
+	require.Len(t, got, 2)
+	require.Equal(t, "PATH=/x/bin", got[1])
 }
 
 func TestBuildShellCommand(t *testing.T) {
 	cmd, err := buildShellCommand(t.Context(), "echo hi")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cmd.SysProcAttr == nil {
-		t.Fatal("expected process-group syscall attr")
-	}
-	if cmd.Cancel == nil {
-		t.Fatal("expected tree-kill cancel")
-	}
-	if cmd.WaitDelay != shellWaitDelay {
-		t.Fatalf("WaitDelay=%v, want %v", cmd.WaitDelay, shellWaitDelay)
-	}
-	if len(cmd.Env) == 0 {
-		t.Fatal("expected enriched env")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, cmd.SysProcAttr, "expected process-group syscall attr")
+	require.NotNil(t, cmd.Cancel, "expected tree-kill cancel")
+	require.Equal(t, shellWaitDelay, cmd.WaitDelay)
+	require.NotEmpty(t, cmd.Env, "expected enriched env")
 }
 
 func TestBuildShellCommandUsesContextCwd(t *testing.T) {
 	dir := t.TempDir()
 	cmd, err := buildShellCommand(tooldef.WithCwd(t.Context(), dir), "echo hi")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cmd.Dir != dir {
-		t.Fatalf("Dir=%q, want %q", cmd.Dir, dir)
-	}
+	require.NoError(t, err)
+	require.Equal(t, dir, cmd.Dir)
 }

@@ -4,156 +4,110 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestInWorkspace(t *testing.T) {
 	ws := "/Users/me/proj"
-	if !InWorkspace("/Users/me/proj", ws) {
-		t.Fatal("workspace root should be inside itself")
-	}
-	if !InWorkspace("/Users/me/proj/src/a.go", ws) {
-		t.Fatal("child should be inside")
-	}
-	if InWorkspace("/Users/me/other", ws) {
-		t.Fatal("sibling should be outside")
-	}
-	if InWorkspace("/Users/me/proj-evil/x", ws) {
-		t.Fatal("prefix-sibling should be outside")
-	}
-	if InWorkspace("/Users/me", ws) {
-		t.Fatal("parent should be outside")
-	}
+	require.True(t, InWorkspace("/Users/me/proj", ws), "workspace root should be inside itself")
+	require.True(t, InWorkspace("/Users/me/proj/src/a.go", ws), "child should be inside")
+	require.False(t, InWorkspace("/Users/me/other", ws), "sibling should be outside")
+	require.False(t, InWorkspace("/Users/me/proj-evil/x", ws), "prefix-sibling should be outside")
+	require.False(t, InWorkspace("/Users/me", ws), "parent should be outside")
 }
 
 func TestCheckWriteOutsideWorkspace(t *testing.T) {
 	ws := t.TempDir()
 	g, err := NewGate(DefaultPolicy(), ws)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	outside := filepath.Join(os.TempDir(), "phi-perm-test-outside")
-	dec, reason := g.Check(t.Context(), Request{
+	dec, _ := g.Check(t.Context(), Request{
 		Action: ActionWrite,
 		Tool:   "write",
 		Paths:  []string{outside},
 	})
-	if dec != Deny {
-		t.Fatalf("want Deny, got %v (%s)", dec, reason)
-	}
+	require.Equal(t, Deny, dec)
 }
 
 func TestCheckWriteInsideWorkspace(t *testing.T) {
 	ws := t.TempDir()
 	g, err := NewGate(DefaultPolicy(), ws)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	inside := filepath.Join(ws, "out.txt")
-	dec, reason := g.Check(t.Context(), Request{
+	dec, _ := g.Check(t.Context(), Request{
 		Action: ActionWrite,
 		Tool:   "write",
 		Paths:  []string{inside},
 	})
-	if dec != Allow {
-		t.Fatalf("want Allow, got %v (%s)", dec, reason)
-	}
+	require.Equal(t, Allow, dec)
 }
 
 func TestCheckWriteSensitiveConfig(t *testing.T) {
 	ws := t.TempDir()
 	g, err := NewGate(DefaultPolicy(), ws)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	home, _ := os.UserHomeDir()
 	cfgPath := filepath.Join(home, ".phi", "config.yaml")
-	dec, reason := g.Check(t.Context(), Request{
+	dec, _ := g.Check(t.Context(), Request{
 		Action: ActionWrite,
 		Tool:   "write",
 		Paths:  []string{cfgPath},
 	})
-	if dec != Deny {
-		t.Fatalf("want Deny for config.yaml, got %v (%s)", dec, reason)
-	}
+	require.Equal(t, Deny, dec)
 }
 
 func TestCheckBashAllowDenyAsk(t *testing.T) {
 	g, err := NewGate(DefaultPolicy(), t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ctx := t.Context()
 
 	dec, _ := g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: "git status"})
-	if dec != Allow {
-		t.Fatalf("git status: want Allow, got %v", dec)
-	}
+	require.Equal(t, Allow, dec, "git status")
 	dec, _ = g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: "go test ./..."})
-	if dec != Allow {
-		t.Fatalf("go test: want Allow, got %v", dec)
-	}
-	dec, reason := g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: "sudo true"})
-	if dec != Deny {
-		t.Fatalf("sudo: want Deny, got %v (%s)", dec, reason)
-	}
-	dec, reason = g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: "curl https://example.com"})
-	if dec != Ask {
-		t.Fatalf("curl: want Ask, got %v (%s)", dec, reason)
-	}
+	require.Equal(t, Allow, dec, "go test")
+	dec, _ = g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: "sudo true"})
+	require.Equal(t, Deny, dec, "sudo")
+	dec, _ = g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: "curl https://example.com"})
+	require.Equal(t, Ask, dec, "curl")
 }
 
 func TestCheckBashCompoundNotAllowlisted(t *testing.T) {
 	g, err := NewGate(DefaultPolicy(), t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	ctx := t.Context()
 
 	// Prefix ^ls\b must NOT allow chained rm.
 	cmd := `ls -la todo.list 2>/dev/null && rm -rf todo.list && echo "removed"`
-	dec, reason := g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: cmd})
-	if dec != Deny {
-		t.Fatalf("ls && rm -rf: want Deny, got %v (%s)", dec, reason)
-	}
+	dec, _ := g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: cmd})
+	require.Equal(t, Deny, dec, "ls && rm -rf")
 
 	// Plain ls still allowed.
-	dec, reason = g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: "ls -la todo.list"})
-	if dec != Allow {
-		t.Fatalf("ls alone: want Allow, got %v (%s)", dec, reason)
-	}
+	dec, _ = g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: "ls -la todo.list"})
+	require.Equal(t, Allow, dec, "ls alone")
 
 	// rm -rf without trailing / must still deny.
-	dec, reason = g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: "rm -rf todo.list"})
-	if dec != Deny {
-		t.Fatalf("rm -rf file: want Deny, got %v (%s)", dec, reason)
-	}
+	dec, _ = g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: "rm -rf todo.list"})
+	require.Equal(t, Deny, dec, "rm -rf file")
 
 	// Pipe / redirect out of allowlist.
-	dec, reason = g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: "cat foo | sh"})
-	if dec == Allow {
-		t.Fatalf("pipe: must not Allow (%s)", reason)
-	}
-	dec, reason = g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: "cat secret > /tmp/out"})
-	if dec == Allow {
-		t.Fatalf("redirect: must not Allow (%s)", reason)
-	}
+	dec, _ = g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: "cat foo | sh"})
+	require.NotEqual(t, Allow, dec, "pipe: must not Allow")
+	dec, _ = g.Check(ctx, Request{Action: ActionBash, Tool: "bash", Command: "cat secret > /tmp/out"})
+	require.NotEqual(t, Allow, dec, "redirect: must not Allow")
 }
 
 func TestModeHeadlessStrictFoldsAsk(t *testing.T) {
 	p := DefaultPolicy()
 	p.Mode = ModeHeadlessStrict
 	g, err := NewGate(p, t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	dec, reason := g.Check(t.Context(), Request{
+	require.NoError(t, err)
+	dec, _ := g.Check(t.Context(), Request{
 		Action:  ActionBash,
 		Tool:    "bash",
 		Command: "curl https://example.com",
 	})
-	if dec != Deny {
-		t.Fatalf("want Deny, got %v (%s)", dec, reason)
-	}
+	require.Equal(t, Deny, dec)
 }
 
 func TestModeReadonlyDeniesWrite(t *testing.T) {
@@ -161,57 +115,43 @@ func TestModeReadonlyDeniesWrite(t *testing.T) {
 	p := DefaultPolicy()
 	p.Mode = ModeReadonly
 	g, err := NewGate(p, ws)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dec, reason := g.Check(t.Context(), Request{
+	require.NoError(t, err)
+	dec, _ := g.Check(t.Context(), Request{
 		Action: ActionWrite,
 		Tool:   "write",
 		Paths:  []string{filepath.Join(ws, "a.txt")},
 	})
-	if dec != Deny {
-		t.Fatalf("want Deny, got %v (%s)", dec, reason)
-	}
+	require.Equal(t, Deny, dec)
 	// allowlisted bash still ok
-	dec, reason = g.Check(t.Context(), Request{
+	dec, _ = g.Check(t.Context(), Request{
 		Action:  ActionBash,
 		Tool:    "bash",
 		Command: "git status",
 	})
-	if dec != Allow {
-		t.Fatalf("git status in readonly: want Allow, got %v (%s)", dec, reason)
-	}
+	require.Equal(t, Allow, dec, "git status in readonly")
 }
 
 func TestModeAutopilotFoldsAsk(t *testing.T) {
 	p := DefaultPolicy()
 	p.Mode = ModeAutopilot
 	g, err := NewGate(p, t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	dec, _ := g.Check(t.Context(), Request{
 		Action:  ActionBash,
 		Tool:    "bash",
 		Command: "curl https://example.com",
 	})
-	if dec != Deny {
-		t.Fatalf("want Deny, got %v", dec)
-	}
+	require.Equal(t, Deny, dec)
 }
 
 func TestReadSensitiveDeny(t *testing.T) {
 	g, err := NewGate(DefaultPolicy(), t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	home, _ := os.UserHomeDir()
-	dec, reason := g.Check(t.Context(), Request{
+	dec, _ := g.Check(t.Context(), Request{
 		Action: ActionRead,
 		Tool:   "read",
 		Paths:  []string{filepath.Join(home, ".ssh", "id_rsa")},
 	})
-	if dec != Deny {
-		t.Fatalf("want Deny, got %v (%s)", dec, reason)
-	}
+	require.Equal(t, Deny, dec)
 }

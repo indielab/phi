@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -60,21 +59,10 @@ func TestExecutorDenyDoesNotRunHandler(t *testing.T) {
 		statuses = append(statuses, td.Run.Status)
 		return true
 	})
-	if ran.Load() != 0 {
-		t.Fatal("handler should not run on deny")
-	}
-	if len(msgs) != 1 || msgs[0].Content != "denied by test" {
-		t.Fatalf("tool message: %+v", msgs)
-	}
-	found := false
-	for _, s := range statuses {
-		if s == session.ToolRejected {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("expected ToolRejected in %v", statuses)
-	}
+	require.Equal(t, int32(0), ran.Load(), "handler should not run on deny")
+	require.Len(t, msgs, 1)
+	require.Equal(t, "denied by test", msgs[0].Content)
+	require.Contains(t, statuses, session.ToolRejected)
 }
 
 func TestExecutorAskFalseRejects(t *testing.T) {
@@ -96,12 +84,9 @@ func TestExecutorAskFalseRejects(t *testing.T) {
 		ID:       "c1",
 		Function: llm.Function{Name: "bash", Arguments: `{"command":"curl x"}`},
 	}}, func(session.ToolData) bool { return true })
-	if ran.Load() != 0 {
-		t.Fatal("handler should not run when ask denied")
-	}
-	if len(msgs) != 1 || msgs[0].Content == "" {
-		t.Fatalf("expected rejection message, got %+v", msgs)
-	}
+	require.Equal(t, int32(0), ran.Load(), "handler should not run when ask denied")
+	require.Len(t, msgs, 1)
+	require.NotEmpty(t, msgs[0].Content, "expected rejection message")
 }
 
 func TestExecutorEmitsToolName(t *testing.T) {
@@ -122,13 +107,9 @@ func TestExecutorEmitsToolName(t *testing.T) {
 		names = append(names, td.Run.Name)
 		return true
 	})
-	if len(names) == 0 {
-		t.Fatal("expected tool events")
-	}
+	require.NotEmpty(t, names, "expected tool events")
 	for _, n := range names {
-		if n != "bash" {
-			t.Fatalf("expected Name=bash on every ToolData, got %q in %v", n, names)
-		}
+		require.Equal(t, "bash", n, "expected Name=bash on every ToolData")
 	}
 }
 
@@ -154,21 +135,10 @@ func TestExecutorAskNilRejectsHeadless(t *testing.T) {
 		statuses = append(statuses, td.Run.Status)
 		return true
 	})
-	if ran.Load() != 0 {
-		t.Fatal("handler should not run when ask handler is nil (headless)")
-	}
-	if len(msgs) != 1 || msgs[0].Content == "" {
-		t.Fatalf("expected rejection message, got %+v", msgs)
-	}
-	found := false
-	for _, s := range statuses {
-		if s == session.ToolRejected {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("expected ToolRejected in %v", statuses)
-	}
+	require.Equal(t, int32(0), ran.Load(), "handler should not run when ask handler is nil (headless)")
+	require.Len(t, msgs, 1)
+	require.NotEmpty(t, msgs[0].Content, "expected rejection message")
+	require.Contains(t, statuses, session.ToolRejected)
 }
 
 func TestExecutorAskTrueRuns(t *testing.T) {
@@ -190,12 +160,9 @@ func TestExecutorAskTrueRuns(t *testing.T) {
 		ID:       "c1",
 		Function: llm.Function{Name: "bash", Arguments: `{"command":"curl x"}`},
 	}}, func(session.ToolData) bool { return true })
-	if ran.Load() != 1 {
-		t.Fatal("handler should run when ask approved")
-	}
-	if len(msgs) != 1 || msgs[0].Content != "ran" {
-		t.Fatalf("got %+v", msgs)
-	}
+	require.Equal(t, int32(1), ran.Load(), "handler should run when ask approved")
+	require.Len(t, msgs, 1)
+	require.Equal(t, "ran", msgs[0].Content)
 }
 
 func TestExecutorAskFeedbackMessage(t *testing.T) {
@@ -215,9 +182,8 @@ func TestExecutorAskFeedbackMessage(t *testing.T) {
 		ID:       "c1",
 		Function: llm.Function{Name: "bash", Arguments: `{"command":"curl x"}`},
 	}}, func(session.ToolData) bool { return true })
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Content, "use go test instead") {
-		t.Fatalf("expected feedback in message, got %+v", msgs)
-	}
+	require.Len(t, msgs, 1)
+	require.Contains(t, msgs[0].Content, "use go test instead")
 }
 
 func TestExecutorNilAskOnAskDenies(t *testing.T) {
@@ -234,9 +200,8 @@ func TestExecutorNilAskOnAskDenies(t *testing.T) {
 		ID:       "c1",
 		Function: llm.Function{Name: "bash", Arguments: `{"command":"curl x"}`},
 	}}, func(session.ToolData) bool { return true })
-	if len(msgs) != 1 || msgs[0].Content == "" {
-		t.Fatalf("expected deny message, got %+v", msgs)
-	}
+	require.Len(t, msgs, 1)
+	require.NotEmpty(t, msgs[0].Content, "expected deny message")
 }
 
 func TestExecutorExtDenySkipsGateAsk(t *testing.T) {
@@ -465,7 +430,7 @@ func TestExecutorRunsReadableBatchConcurrently(t *testing.T) {
 		select {
 		case <-entered:
 		case <-time.After(2 * time.Second):
-			t.Fatal("readable batch did not run concurrently")
+			require.Fail(t, "readable batch did not run concurrently")
 		}
 	}
 	close(release)
@@ -512,12 +477,12 @@ func TestExecutorMixedBatchStaysSequential(t *testing.T) {
 	case name := <-entered:
 		assert.Equal(t, "readA", name, "readable call should run first")
 	case <-time.After(2 * time.Second):
-		t.Fatal("first call never started")
+		require.Fail(t, "first call never started")
 	}
 	// The write tool must not start while the first call is still running.
 	select {
 	case name := <-entered:
-		t.Fatalf("second call %q started before the first finished", name)
+		require.Failf(t, "second call %q started before the first finished", name)
 	case <-time.After(150 * time.Millisecond):
 	}
 	close(release)
@@ -525,7 +490,7 @@ func TestExecutorMixedBatchStaysSequential(t *testing.T) {
 	case name := <-entered:
 		assert.Equal(t, "bash", name)
 	case <-time.After(2 * time.Second):
-		t.Fatal("second call never started after first released")
+		require.Fail(t, "second call never started after first released")
 	}
 	<-done
 

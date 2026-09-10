@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -141,9 +140,7 @@ func TestLoopMaxRoundsDoesNotExecuteExtraToolRound(t *testing.T) {
 		}
 	}
 	require.Error(t, lastErr, "loop should stop when the model requests a third tool round")
-	if !errors.Is(lastErr, ErrMaxRounds) {
-		t.Fatalf("expected ErrMaxRounds to be wrapped, got %v", lastErr)
-	}
+	require.ErrorIs(t, lastErr, ErrMaxRounds)
 	require.Equal(t, int32(2), runs.Load())
 	require.Equal(t, int32(3), requests.Load())
 

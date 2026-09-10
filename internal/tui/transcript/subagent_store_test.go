@@ -3,6 +3,8 @@ package transcript_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/phi/internal/components/status"
 	"github.com/pulseaiclub/phi/internal/job"
 	"github.com/pulseaiclub/phi/internal/tools"
@@ -38,22 +40,15 @@ func TestSubagentStoreProgressAndResult(t *testing.T) {
 	})
 
 	kids := s.Children("parent1")
-	if len(kids) != 2 {
-		t.Fatalf("len=%d", len(kids))
-	}
-	if kids[0].Status != status.ToolDone || kids[0].Name != "read" {
-		t.Fatalf("%+v", kids[0])
-	}
+	require.Len(t, kids, 2)
+	require.Equal(t, status.ToolDone, kids[0].Status)
+	require.Equal(t, "read", kids[0].Name)
 	byJob := s.ChildrenByJob("job1")
-	if len(byJob) != 2 {
-		t.Fatalf("byJob len=%d", len(byJob))
-	}
+	require.Len(t, byJob, 2)
 
 	s.ApplyResult("parent1", tools.ParseAgentResult(`{
 		"job_id":"job1","status":"completed","summary":"## Ok"
 	}`))
 	// Summary is stored; Children unchanged.
-	if len(s.Children("parent1")) != 2 {
-		t.Fatal("children cleared")
-	}
+	require.Len(t, s.Children("parent1"), 2, "children should not be cleared")
 }

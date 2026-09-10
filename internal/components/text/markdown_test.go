@@ -94,7 +94,7 @@ func TestRenderMarkdown_Basics(t *testing.T) {
 						return
 					}
 				}
-				t.Fatal("docs span not found")
+				require.Fail(t, "docs span not found")
 			},
 		},
 		{
@@ -114,7 +114,7 @@ func TestRenderMarkdown_Basics(t *testing.T) {
 						return
 					}
 				}
-				t.Fatal("path span not found")
+				require.Fail(t, "path span not found")
 			},
 		},
 	}

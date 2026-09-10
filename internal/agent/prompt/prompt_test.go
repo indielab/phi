@@ -1,79 +1,46 @@
 package prompt
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildAgentsEnabledToggle(t *testing.T) {
 	with := Build("", true, 4, nil)
 	without := Build("", false, 0, nil)
 
-	if !strings.Contains(with, "agent_spawn") {
-		t.Fatal("expected agent_spawn guidance when agents enabled")
-	}
-	if !strings.Contains(with, "Sub-agents:") {
-		t.Fatal("expected Sub-agents section when agents enabled")
-	}
-	if !strings.Contains(with, "At most 4 sub-agents run concurrently") {
-		t.Fatal("expected sub-agent concurrency cap when agents enabled")
-	}
-	if strings.Contains(without, "agent_spawn") {
-		t.Fatal("did not expect sub-agent tool names when agents disabled")
-	}
-	if strings.Contains(without, "sub-agents run concurrently") {
-		t.Fatal("did not expect sub-agent concurrency cap when agents disabled")
-	}
-	if !strings.Contains(without, "`find` / `grep` / `ls` yourself") {
-		t.Fatal("expected direct-search guidance when agents disabled")
-	}
+	require.Contains(t, with, "agent_spawn")
+	require.Contains(t, with, "Sub-agents:")
+	require.Contains(t, with, "At most 4 sub-agents run concurrently")
+	require.NotContains(t, without, "agent_spawn")
+	require.NotContains(t, without, "sub-agents run concurrently")
+	require.Contains(t, without, "`find` / `grep` / `ls` yourself")
 }
 
 func TestBuildEditHashCopyIsUnambiguous(t *testing.T) {
 	got := Build("", false, 0, nil)
-	if strings.Contains(got, "copy `@file path#TAG` into") {
-		t.Fatal("prompt must not tell the model to paste the whole @file header into edit.hash")
-	}
-	if !strings.Contains(got, "4 hex chars after `#`") {
-		t.Fatal("expected edit.hash to be described as the 4 hex chars after #")
-	}
-	if strings.Contains(got, "Known path or exact symbol") {
-		t.Fatal("known-path routing must not bundle ls/find/grep/read together")
-	}
-	if strings.Contains(got, "creates a new file only") || strings.Contains(got, "fails if it already exists") {
-		t.Fatal("write must not be described as create-only")
-	}
-	if !strings.Contains(got, "`write` creates or overwrites") {
-		t.Fatal("expected write to create or overwrite")
-	}
-	if !strings.Contains(got, "Prefer cwd-relative paths") {
-		t.Fatal("expected tools to prefer cwd-relative paths")
-	}
+	require.NotContains(t, got, "copy `@file path#TAG` into")
+	require.Contains(t, got, "4 hex chars after `#`")
+	require.NotContains(t, got, "Known path or exact symbol")
+	require.NotContains(t, got, "creates a new file only")
+	require.NotContains(t, got, "fails if it already exists")
+	require.Contains(t, got, "`write` creates or overwrites")
+	require.Contains(t, got, "Prefer cwd-relative paths")
 }
 
 func TestBuildMCPCatalog(t *testing.T) {
 	none := Build("", false, 0, nil)
-	if strings.Contains(none, "# MCP") {
-		t.Fatal("expected no MCP section without servers")
-	}
-	if strings.Contains(none, "External docs/URLs") {
-		t.Fatal("Discovery must not mention MCP/URLs when no servers are configured")
-	}
+	require.NotContains(t, none, "# MCP")
+	require.NotContains(t, none, "External docs/URLs")
 	got := Build("", false, 0, []string{"browsermcp", "github"})
-	if !strings.Contains(got, "# MCP") {
-		t.Fatal("expected MCP section")
-	}
-	if !strings.Contains(got, "- browsermcp") || !strings.Contains(got, "- github") {
-		t.Fatalf("expected server names in catalog, got:\n%s", got)
-	}
-	if !strings.Contains(got, "mcp_list") || !strings.Contains(got, "mcp_inspect") ||
-		!strings.Contains(got, "mcp_call") {
-		t.Fatal("expected mcp_* usage guidance")
-	}
-	if !strings.Contains(got, "docs/URLs") {
-		t.Fatal("expected MCP block to mention external docs/URLs when servers are configured")
-	}
-	if strings.Contains(got, `"properties"`) || strings.Contains(got, "inputSchema") {
-		t.Fatal("MCP catalog must not include tool schemas")
-	}
+	require.Contains(t, got, "# MCP")
+	require.Contains(t, got, "- browsermcp")
+	require.Contains(t, got, "- github")
+	require.Contains(t, got, "mcp_list")
+	require.Contains(t, got, "mcp_inspect")
+	require.Contains(t, got, "mcp_call")
+	require.Contains(t, got, "docs/URLs")
+	require.NotContains(t, got, `"properties"`)
+	require.NotContains(t, got, "inputSchema")
 }

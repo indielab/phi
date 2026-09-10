@@ -6,153 +6,98 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestLs_RelativePath(t *testing.T) {
 	root := t.TempDir()
 	sub := filepath.Join(root, "pkg")
-	if err := os.Mkdir(sub, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(sub, "main.go"), []byte("package pkg"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(sub, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sub, "main.go"), []byte("package pkg"), 0o644))
 
 	t.Chdir(root)
 
 	raw, err := json.Marshal(lsInput{Path: "pkg"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	out, err := runLs(t.Context(), raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.Content, "main.go") {
-		t.Fatalf("expected output to contain main.go, got: %s", out.Content)
-	}
-	if !strings.HasPrefix(out.Content, "pkg/") {
-		t.Fatalf("expected cwd-relative tree root pkg/, got: %s", out.Content)
-	}
-	if out.Detail != "pkg" {
-		t.Fatalf("expected detail pkg, got %q", out.Detail)
-	}
+	require.NoError(t, err)
+	require.Contains(t, out.Content, "main.go")
+	require.True(
+		t,
+		strings.HasPrefix(out.Content, "pkg/"),
+		"expected cwd-relative tree root pkg/, got: %s",
+		out.Content,
+	)
+	require.Equal(t, "pkg", out.Detail)
 }
 
 func TestLs_Errors(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "a.txt")
-	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(file, []byte("x"), 0o644))
 
 	raw, err := json.Marshal(lsInput{Path: file})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	_, err = runLs(t.Context(), raw)
-	if err == nil {
-		t.Fatal("expected error for file path, got nil")
-	}
-	if !strings.Contains(strings.ToLower(err.Error()), "not a directory") {
-		t.Fatalf("expected 'not a directory' error, got: %v", err)
-	}
+	require.Error(t, err, "expected error for file path")
+	require.Contains(t, strings.ToLower(err.Error()), "not a directory")
 }
 
 func TestLs_MaxDepthStopsExpansion(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "lvl1", "lvl2", "lvl3"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "lvl1", "lvl2", "lvl3", "deep.txt"), []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "lvl1", "lvl2", "lvl3"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "lvl1", "lvl2", "lvl3", "deep.txt"), []byte("x"), 0o644))
 
 	raw, err := json.Marshal(lsInput{
 		Path:     root,
 		MaxDepth: 3,
 		Limit:    100,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	out, err := runLs(t.Context(), raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	result := out.Content
 
-	if !strings.Contains(result, "lvl1"+string(os.PathSeparator)) {
-		t.Fatalf("expected output to contain lvl1/")
-	}
-	if !strings.Contains(result, "lvl2"+string(os.PathSeparator)) {
-		t.Fatalf("expected output to contain lvl2/")
-	}
-	if !strings.Contains(result, "lvl3"+string(os.PathSeparator)) {
-		t.Fatalf("expected output to contain lvl3/")
-	}
-	if strings.Contains(result, "deep.txt") {
-		t.Fatalf("expected output NOT to contain deep.txt at maxDepth=3")
-	}
+	require.Contains(t, result, "lvl1"+string(os.PathSeparator))
+	require.Contains(t, result, "lvl2"+string(os.PathSeparator))
+	require.Contains(t, result, "lvl3"+string(os.PathSeparator))
+	require.NotContains(t, result, "deep.txt", "expected output NOT to contain deep.txt at maxDepth=3")
 }
 
 func TestLs_LimitTriggersTruncationMessage(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("a"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "b.txt"), []byte("b"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "b.txt"), []byte("b"), 0o644))
 
 	raw, err := json.Marshal(lsInput{
 		Path:  root,
 		Limit: 1,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	out, err := runLs(t.Context(), raw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	result := out.Content
 
-	if !strings.Contains(result, "Tree truncated after 1 files") {
-		t.Fatalf("expected truncation message, got: %s", result)
-	}
-	if !strings.Contains(result, "limit=<n>") {
-		t.Fatalf("expected limit=<n> hint, got: %s", result)
-	}
+	require.Contains(t, result, "Tree truncated after 1 files")
+	require.Contains(t, result, "limit=<n>")
 }
 
 func TestLs_DefaultOptionsApplied(t *testing.T) {
 	limit, depth := normalizeOptions(0, 0)
-	if limit != defaultMaxFiles {
-		t.Fatalf("expected limit=%d, got %d", defaultMaxFiles, limit)
-	}
-	if depth != defaultMaxDepth {
-		t.Fatalf("expected depth=%d, got %d", defaultMaxDepth, depth)
-	}
+	require.Equal(t, defaultMaxFiles, limit)
+	require.Equal(t, defaultMaxDepth, depth)
 }
 
 func TestLs_PlainStringPath(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "x.txt"), []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "x.txt"), []byte("x"), 0o644))
 
 	// Pass path as a plain JSON string, not an object.
 	raw, err := json.Marshal(root)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	out, err := runLs(t.Context(), raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.Content, "x.txt") {
-		t.Fatalf("expected output to contain x.txt, got: %s", out.Content)
-	}
+	require.NoError(t, err)
+	require.Contains(t, out.Content, "x.txt")
 }

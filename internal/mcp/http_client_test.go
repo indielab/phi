@@ -6,10 +6,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/pulseaiclub/phi/internal/mcp"
 )
@@ -97,37 +98,24 @@ func TestHTTPClientJSONAndSSE(t *testing.T) {
 		URL:       srv.URL,
 		Headers:   map[string]string{"Authorization": "Bearer test"},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer func() { _ = c.Close() }()
 
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 
-	if err := c.Initialize(ctx); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, c.Initialize(ctx))
 	tools, err := c.ListTools(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(tools) != 1 || tools[0].Name != "echo" {
-		t.Fatalf("tools = %+v", tools)
-	}
+	require.NoError(t, err)
+	require.Len(t, tools, 1, "tools = %+v", tools)
+	require.Equal(t, "echo", tools[0].Name, "tools = %+v", tools)
 	out, err := c.CallTool(ctx, "echo", map[string]any{"message": "hi"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out, "hi") {
-		t.Fatalf("out = %q", out)
-	}
+	require.NoError(t, err)
+	require.Contains(t, out, "hi", "out = %q", out)
 	mu.Lock()
 	okHeader := sawHeader
 	mu.Unlock()
-	if !okHeader {
-		t.Fatal("expected Authorization header")
-	}
+	require.True(t, okHeader, "expected Authorization header")
 }
 
 func writeJSONRPC(w http.ResponseWriter, id, result any) {
@@ -141,17 +129,12 @@ func writeJSONRPC(w http.ResponseWriter, id, result any) {
 
 func TestNewClientUnsupportedTransport(t *testing.T) {
 	_, err := mcp.NewClient("x", mcp.ServerConfig{Transport: "grpc", Command: []string{"true"}})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "unsupported transport") {
-		t.Fatalf("got %v", err)
-	}
+	require.Error(t, err, "expected error")
+	require.Contains(t, err.Error(), "unsupported transport")
 }
 
 func TestNewClientHTTPRequiresURL(t *testing.T) {
 	_, err := mcp.NewClient("x", mcp.ServerConfig{Transport: "http"})
-	if err == nil || !strings.Contains(err.Error(), "url") {
-		t.Fatalf("got %v", err)
-	}
+	require.Error(t, err, "got %v", err)
+	require.Contains(t, err.Error(), "url")
 }

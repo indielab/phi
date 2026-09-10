@@ -119,7 +119,7 @@ func TestS4Cancel(t *testing.T) {
 	select {
 	case <-started:
 	case <-time.After(2 * time.Second):
-		t.Fatal("job did not start")
+		require.Fail(t, "job did not start")
 	}
 
 	cancelRaw, _ := json.Marshal(map[string]any{"job_id": spawned.JobID})

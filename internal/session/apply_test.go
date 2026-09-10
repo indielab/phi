@@ -3,39 +3,37 @@ package session
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/phi/internal/llm"
 )
 
 func TestApplyStreamingUpdates(t *testing.T) {
 	var s Snapshot
 	s = Apply(s, UserAppend{ID: "u1", Text: "hello"})
-	if len(s.Messages) != 1 || s.Messages[0].Role != RoleUser {
-		t.Fatalf("user: %+v", s.Messages)
-	}
+	require.Len(t, s.Messages, 1)
+	require.Equal(t, RoleUser, s.Messages[0].Role)
 
 	s = Apply(s, AssistantMessageUpdate{Message: Message{
 		ID: "a1", State: StateStreaming,
 		Content: []ContentBlock{{Type: BlockText, Text: "Hi"}},
 	}})
-	if len(s.Messages) != 2 || !IsStreaming(s) {
-		t.Fatalf("start: %+v", s.Messages)
-	}
+	require.Len(t, s.Messages, 2)
+	require.True(t, IsStreaming(s))
 
 	s = Apply(s, AssistantMessageUpdate{Message: Message{
 		ID: "a1", State: StateStreaming,
 		Content: []ContentBlock{{Type: BlockText, Text: "Hi there"}},
 	}})
-	if len(s.Messages) != 2 || s.Messages[1].FlatText() != "Hi there" {
-		t.Fatalf("delta replace: %+v", s.Messages)
-	}
+	require.Len(t, s.Messages, 2)
+	require.Equal(t, "Hi there", s.Messages[1].FlatText())
 
 	s = Apply(s, AssistantMessageUpdate{Message: Message{
 		ID: "a1", State: StateComplete,
 		Content: []ContentBlock{{Type: BlockText, Text: "Hi there!"}},
 	}})
-	if IsStreaming(s) || s.Messages[1].State != StateComplete {
-		t.Fatalf("complete: %+v", s.Messages)
-	}
+	require.False(t, IsStreaming(s))
+	require.Equal(t, StateComplete, s.Messages[1].State)
 }
 
 func TestCancelStreaming(t *testing.T) {
@@ -52,12 +50,8 @@ func TestCancelStreaming(t *testing.T) {
 		},
 	}
 	s = Apply(s, CancelStreaming{})
-	if s.Messages[1].State != StateCancelled {
-		t.Fatalf("assistant: %+v", s.Messages[1])
-	}
-	if s.Tools["t1"].Status != ToolCancelled {
-		t.Fatalf("tool: %+v", s.Tools["t1"])
-	}
+	require.Equal(t, StateCancelled, s.Messages[1].State)
+	require.Equal(t, ToolCancelled, s.Tools["t1"].Status)
 }
 
 func TestToolDataAndSecondTurn(t *testing.T) {
@@ -70,26 +64,18 @@ func TestToolDataAndSecondTurn(t *testing.T) {
 			{Type: BlockToolUse, ID: "t1", Name: "Read", Input: "a.go", Complete: true},
 		},
 	}})
-	if s.Tools["t1"].Status != ToolInProgress {
-		t.Fatalf("synthetic tool: %+v", s.Tools)
-	}
-	if s.Tools["t1"].Name != "Read" {
-		t.Fatalf("expected Name=Read from tool_use block, got %q", s.Tools["t1"].Name)
-	}
+	require.Equal(t, ToolInProgress, s.Tools["t1"].Status)
+	require.Equal(t, "Read", s.Tools["t1"].Name)
 	s = Apply(s, ToolData{Run: ToolRun{ToolUseID: "t1", Status: ToolDone, Output: "ok"}})
-	if s.Tools["t1"].Status != ToolDone || s.Tools["t1"].Output != "ok" {
-		t.Fatalf("tool done: %+v", s.Tools["t1"])
-	}
-	if s.Tools["t1"].Name != "Read" {
-		t.Fatalf("expected Name preserved across ToolData, got %q", s.Tools["t1"].Name)
-	}
+	require.Equal(t, ToolDone, s.Tools["t1"].Status)
+	require.Equal(t, "ok", s.Tools["t1"].Output)
+	require.Equal(t, "Read", s.Tools["t1"].Name, "Name preserved across ToolData")
 	s = Apply(s, AssistantMessageUpdate{Message: Message{
 		ID: "a2", State: StateStreaming,
 		Content: []ContentBlock{{Type: BlockText, Text: "done"}},
 	}})
-	if len(s.Messages) != 3 || s.Messages[2].ID != "a2" {
-		t.Fatalf("second turn: %+v", s.Messages)
-	}
+	require.Len(t, s.Messages, 3)
+	require.Equal(t, "a2", s.Messages[2].ID)
 }
 
 func TestProjectOrder(t *testing.T) {
@@ -110,70 +96,56 @@ func TestProjectOrder(t *testing.T) {
 		},
 	}
 	items := Project(s)
-	if len(items) != 4 {
-		t.Fatalf("len=%d %+v", len(items), items)
-	}
-	if items[0].Kind != ItemUser || items[1].Kind != ItemThinking ||
-		items[2].Kind != ItemAssistant || items[3].Kind != ItemTool {
-		t.Fatalf("order: %+v", items)
-	}
-	if items[3].ToolRun.Status != ToolDone || items[3].ToolRun.Output != "a\n" || items[3].ToolRun.Name != "Bash" {
-		t.Fatalf("tool item: %+v", items[3])
-	}
+	require.Len(t, items, 4)
+	require.Equal(t, ItemUser, items[0].Kind)
+	require.Equal(t, ItemThinking, items[1].Kind)
+	require.Equal(t, ItemAssistant, items[2].Kind)
+	require.Equal(t, ItemTool, items[3].Kind)
+	require.Equal(t, ToolDone, items[3].ToolRun.Status)
+	require.Equal(t, "a\n", items[3].ToolRun.Output)
+	require.Equal(t, "Bash", items[3].ToolRun.Name)
 }
 
 func TestCompactionEvents(t *testing.T) {
 	var s Snapshot
 	s = Apply(s, UserAppend{Text: "hi"})
 	s = Apply(s, CompactionStarted{})
-	if !s.Compacting || !IsStreaming(s) {
-		t.Fatalf("compacting: %+v", s)
-	}
+	require.True(t, s.Compacting)
+	require.True(t, IsStreaming(s))
 	s = Apply(s, CompactionComplete{ID: "c1"})
-	if s.Compacting {
-		t.Fatal("should clear compacting")
-	}
-	if len(s.Messages) != 2 || s.Messages[1].Role != RoleCompaction {
-		t.Fatalf("marker: %+v", s.Messages)
-	}
+	require.False(t, s.Compacting)
+	require.Len(t, s.Messages, 2)
+	require.Equal(t, RoleCompaction, s.Messages[1].Role)
 	items := Project(s)
-	if len(items) < 2 || items[len(items)-1].Kind != ItemCompaction {
-		t.Fatalf("project: %+v", items)
-	}
+	require.GreaterOrEqual(t, len(items), 2)
+	require.Equal(t, ItemCompaction, items[len(items)-1].Kind)
 
 	s = Apply(s, CompactionStarted{})
 	s = Apply(s, CompactionComplete{ID: "c2", Failed: true})
-	if s.Compacting {
-		t.Fatal("failed should clear")
-	}
+	require.False(t, s.Compacting)
 	nMarkers := 0
 	for _, m := range s.Messages {
 		if m.Role == RoleCompaction {
 			nMarkers++
 		}
 	}
-	if nMarkers != 1 {
-		t.Fatalf("markers=%d", nMarkers)
-	}
+	require.Equal(t, 1, nMarkers)
 }
 
 func TestLocalBash(t *testing.T) {
 	var s Snapshot
 	s = Apply(s, LocalBashStart{ID: "b1", Command: "echo hi"})
-	if len(s.Messages) != 1 || s.Messages[0].Role != RoleLocalBash {
-		t.Fatalf("msg: %+v", s.Messages)
-	}
-	if !s.Tools["b1"].Local || s.Tools["b1"].Status != ToolInProgress {
-		t.Fatalf("tool: %+v", s.Tools["b1"])
-	}
-	if IsStreaming(s) || HasRunningTools(s) {
-		t.Fatal("local bash must not count as agent streaming")
-	}
+	require.Len(t, s.Messages, 1)
+	require.Equal(t, RoleLocalBash, s.Messages[0].Role)
+	require.True(t, s.Tools["b1"].Local)
+	require.Equal(t, ToolInProgress, s.Tools["b1"].Status)
+	require.False(t, IsStreaming(s))
+	require.False(t, HasRunningTools(s))
 
 	items := Project(s)
-	if len(items) != 1 || items[0].Kind != ItemTool || items[0].ToolRun.Name != "bash" {
-		t.Fatalf("project: %+v", items)
-	}
+	require.Len(t, items, 1)
+	require.Equal(t, ItemTool, items[0].Kind)
+	require.Equal(t, "bash", items[0].ToolRun.Name)
 
 	s = Apply(s, ToolData{Run: ToolRun{
 		ToolUseID: "b1",
@@ -182,16 +154,13 @@ func TestLocalBash(t *testing.T) {
 		ExitCode:  0,
 		Local:     true,
 	}})
-	if s.Tools["b1"].Status != ToolDone || !s.Tools["b1"].Local {
-		t.Fatalf("done: %+v", s.Tools["b1"])
-	}
+	require.Equal(t, ToolDone, s.Tools["b1"].Status)
+	require.True(t, s.Tools["b1"].Local)
 
 	// CancelStreaming must leave local bash alone.
 	s = Apply(s, LocalBashStart{ID: "b2", Command: "sleep 9"})
 	s = Apply(s, CancelStreaming{})
-	if s.Tools["b2"].Status != ToolInProgress {
-		t.Fatalf("cancel must skip local: %+v", s.Tools["b2"])
-	}
+	require.Equal(t, ToolInProgress, s.Tools["b2"].Status)
 }
 
 func TestApplyUserAppendImages(t *testing.T) {
@@ -200,10 +169,7 @@ func TestApplyUserAppendImages(t *testing.T) {
 		Text:   "Images: a.png",
 		Images: []llm.Image{{Data: "QUJD", MimeType: "image/png"}},
 	})
-	if len(s.Messages) != 1 {
-		t.Fatalf("messages=%d", len(s.Messages))
-	}
-	if len(s.Messages[0].Images) != 1 || s.Messages[0].Images[0].MimeType != "image/png" {
-		t.Fatalf("images: %+v", s.Messages[0].Images)
-	}
+	require.Len(t, s.Messages, 1)
+	require.Len(t, s.Messages[0].Images, 1)
+	require.Equal(t, "image/png", s.Messages[0].Images[0].MimeType)
 }

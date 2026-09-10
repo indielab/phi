@@ -79,7 +79,7 @@ func TestCancelStopsRunner(t *testing.T) {
 	select {
 	case <-started:
 	case <-time.After(2 * time.Second):
-		t.Fatal("runner did not start")
+		require.Fail(t, "runner did not start")
 	}
 
 	require.NoError(t, m.Cancel(ctx, info.ID))
@@ -326,7 +326,7 @@ func TestSubscribeProgress(t *testing.T) {
 			require.True(t, ok)
 			got = append(got, p)
 		case <-deadline:
-			t.Fatalf("timeout, got %d events", len(got))
+			require.Failf(t, "timeout", "got %d events", len(got))
 		}
 	}
 	assert.Equal(t, info.ID, got[0].JobID)
