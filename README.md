@@ -12,10 +12,11 @@
   <a href="https://github.com/pulseaiclub/phi/releases"><img src="https://img.shields.io/github/v/release/pulseaiclub/phi?style=flat&colorA=222222&colorB=8957E5" alt="Release"></a>
 </p>
 
-A minimal terminal coding agent harness in Go — a sibling to Pi.
+A lean, high-performance terminal coding agent harness in Go — a sibling to Pi.
 
 **Docs:** [pulseaiclub.github.io](https://pulseaiclub.github.io/)
 
+- **Fast and small** — ~12 MB release binary, ~21 MB idle RSS, ~40 ms to first frame; no Node / Electron / Python runtime
 - **Sub-agents** — spawn isolated jobs and watch the full run unfold in the TUI / job logs, without stuffing every turn into the parent context
 - **Hashline edits** — edit by whole-file `@file path#TAG` plus line `LINE#HASH` anchors (same idea as [oh-my-pi](https://github.com/can1357/oh-my-pi)): the model points at anchors instead of rewriting whole files; stale tags/hashes are rejected so over-edits and silent corruption stop here
 - **Permission gate** — Gate / Ask before destructive tools fire; safety is not optional when an agent can touch your tree
@@ -92,9 +93,9 @@ fulfill your requests. External HTTP fetch is available via MCP when configured.
 
 ## Footprint
 
-phi aims to stay cheap to run and cheap to hack on. Numbers below are for a
-stripped release build (`CGO_ENABLED=0`, `-ldflags="-s -w"`), measured on
-macOS arm64 unless noted.
+Lean is not enough — phi is built to feel instant and stay cheap under load.
+Numbers below are for a stripped release build (`CGO_ENABLED=0`,
+`-ldflags="-s -w"`), measured on macOS arm64 unless noted.
 
 | Metric | phi |
 | --- | ---: |
