@@ -10,6 +10,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.26.0] - 2026-09-10
+
+### Added
+
 - Extensions: `ToolResult.Expanded` opens the TUI tool row by default (e.g. plan
   body). User toggle still wins after the first interaction.
 - CI / `make lint-markdown`: markdownlint on `**/*.md`.
@@ -466,7 +480,8 @@ Earlier releases are available from GitHub tags only.
 
 <!-- Released section ended -->
 
-[Unreleased]: https://github.com/pulseaiclub/phi/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/pulseaiclub/phi/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.26.0
 [0.25.1]: https://github.com/pulseaiclub/phi/releases/tag/v0.25.1
 [0.25.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.25.0
 [0.24.0]: https://github.com/pulseaiclub/phi/releases/tag/v0.24.0
