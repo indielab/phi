@@ -59,6 +59,7 @@ make test        # go test ./...
 make fmt         # apply gofumpt / goimports / golines
 make fmt-check   # fail if formatting would change files (same as CI)
 make lint        # golangci-lint run ./...
+make lint-markdown # markdownlint via Docker (needs a local daemon)
 make deadcode    # unreachable functions vs baseline (deadcode -test)
 make check       # fmt-check + lint + deadcode (same as CI)
 ```
