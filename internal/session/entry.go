@@ -77,12 +77,12 @@ func (s SessionMessageEntry) GetParent() *string { return s.ParentID }
 
 // Compaction is the data attached to a compaction entry.
 type Compaction struct {
-	Summary          string         `json:"summary"`
-	FirstKeptEntryID string         `json:"firstKeptEntryId"`
-	TokensBefore     int            `json:"tokensBefore"`
-	Details          any            `json:"details,omitempty"`
-	PreserveData     map[string]any `json:"preserveData,omitempty"`
-	FromExtension    *bool          `json:"fromExtension,omitempty"`
+	Summary          string            `json:"summary"`
+	FirstKeptEntryID string            `json:"firstKeptEntryId"`
+	TokensBefore     int               `json:"tokensBefore"`
+	Details          CompactionDetails `json:"details,omitempty"`
+	PreserveData     map[string]any    `json:"preserveData,omitempty"`
+	FromExtension    *bool             `json:"fromExtension,omitempty"`
 }
 
 // CompactionEntry is a compaction node in the session tree.
@@ -93,8 +93,8 @@ type CompactionEntry struct {
 
 // CompactionDetails records file reads/modifications captured at compaction.
 type CompactionDetails struct {
-	ReadFiles     []string
-	ModifiedFiles []string
+	ReadFiles     []string `json:"readFiles,omitempty"`
+	ModifiedFiles []string `json:"modifiedFiles,omitempty"`
 }
 
 // GetType implements MessageEntry.

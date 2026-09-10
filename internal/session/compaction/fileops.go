@@ -60,19 +60,22 @@ func extractFileOperations(
 	entries []session.MessageEntry,
 	prevCompactionIndex int,
 ) *FileOperation {
-	fileOps := &FileOperation{}
-	// Collect from previous compaction's details (if extension-generated)
+	var prevRead, prevWritten []string
 	if prevCompactionIndex >= 0 {
-		comp := entries[prevCompactionIndex].(session.CompactionEntry)
-		if comp.Compaction.FromExtension != nil {
-			details, ok := comp.Compaction.Details.(session.CompactionDetails)
-			if ok {
-				fileOps.read = append(fileOps.read, details.ReadFiles...)
-				fileOps.written = append(fileOps.written, details.ModifiedFiles...)
-			}
-		}
+		d := entries[prevCompactionIndex].(session.CompactionEntry).Compaction.Details
+		prevRead, prevWritten = d.ReadFiles, d.ModifiedFiles
 	}
-
+	extra := 0
+	for _, msg := range messages {
+		extra += len(msg.ToolCalls)
+	}
+	fileOps := &FileOperation{
+		read:    make([]string, 0, len(prevRead)+extra),
+		written: make([]string, 0, len(prevWritten)+extra),
+		edited:  make([]string, 0, extra),
+	}
+	fileOps.read = append(fileOps.read, prevRead...)
+	fileOps.written = append(fileOps.written, prevWritten...)
 	for _, msg := range messages {
 		fileOps.extractMessageContent(msg)
 	}

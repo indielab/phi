@@ -18,6 +18,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- Compaction file-op details are a typed `session.CompactionDetails` (not `any`),
+  so persist/reload and later compact rounds keep prior read/modified files.
+
 ### Security
 
 <!-- Released section -->
