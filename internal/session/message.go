@@ -110,6 +110,27 @@ func (s ToolStatus) String() string {
 	}
 }
 
+// ParseToolStatus maps a progress / persist string onto ToolStatus.
+// Unknown values (including "") become ToolInProgress so live rows keep spinning.
+func ParseToolStatus(s string) ToolStatus {
+	switch s {
+	case "queued":
+		return ToolQueued
+	case "in-progress":
+		return ToolInProgress
+	case "done":
+		return ToolDone
+	case "error":
+		return ToolError
+	case "cancelled":
+		return ToolCancelled
+	case "rejected", "rejected-by-user":
+		return ToolRejected
+	default:
+		return ToolInProgress
+	}
+}
+
 // ToolRun is the live execution state for a tool_use id.
 type ToolRun struct {
 	ToolUseID string

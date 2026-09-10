@@ -4,8 +4,8 @@ import (
 	"sync"
 
 	"github.com/pulseaiclub/phi/internal/components/block"
-	"github.com/pulseaiclub/phi/internal/components/status"
 	"github.com/pulseaiclub/phi/internal/job"
+	"github.com/pulseaiclub/phi/internal/session"
 	"github.com/pulseaiclub/phi/internal/tools"
 )
 
@@ -95,7 +95,7 @@ func (s *SubagentStore) ApplyProgress(p job.Progress) bool {
 	child := block.ChildTool{
 		Name:   p.Name,
 		Detail: p.Detail,
-		Status: progressStatus(p.Status),
+		Status: uiToolStatus(session.ParseToolStatus(p.Status)),
 	}
 	if i, ok := v.childIdx[key]; ok {
 		if v.Children[i] == child {
@@ -148,21 +148,4 @@ func (s *SubagentStore) ChildrenByJob(jobID string) []block.ChildTool {
 		return nil
 	}
 	return append([]block.ChildTool(nil), v.Children...)
-}
-
-func progressStatus(s string) status.ToolStatus {
-	switch s {
-	case "done":
-		return status.ToolDone
-	case "error":
-		return status.ToolError
-	case "cancelled":
-		return status.ToolCancelled
-	case "rejected", "rejected-by-user":
-		return status.ToolRejected
-	case "queued":
-		return status.ToolQueued
-	default:
-		return status.ToolRunning
-	}
 }

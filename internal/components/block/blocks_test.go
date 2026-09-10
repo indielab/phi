@@ -17,7 +17,7 @@ func TestBashBlockRendersOutput(t *testing.T) {
 	b := &block.BashBlock{
 		Command:  "ls",
 		Output:   strings.Join(lines, "\n"),
-		Status:   block.BashDone,
+		Status:   status.ToolDone,
 		Expanded: true,
 		Theme:    components.DefaultTheme(),
 	}

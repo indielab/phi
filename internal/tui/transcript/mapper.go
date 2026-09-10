@@ -156,7 +156,7 @@ func (m *Mapper) patchTool(w components.Widget, it session.Item) (ok, dirty bool
 		if !ok {
 			return false, false
 		}
-		st := bashStatus(run.Status)
+		st := uiToolStatus(run.Status)
 		prevExp := b.Expanded
 		dirty = b.Command != run.Detail || b.Output != run.Output || b.Status != st || b.ExitCode != run.ExitCode
 		b.Command = run.Detail
@@ -169,7 +169,7 @@ func (m *Mapper) patchTool(w components.Widget, it session.Item) (ok, dirty bool
 		} else if run.Local {
 			// User "!cmd" results should stay open so output is visible.
 			b.Expanded = true
-		} else if b.Status == block.BashRunning && b.Output != "" {
+		} else if b.Status == status.ToolRunning && b.Output != "" {
 			b.Expanded = true
 		}
 		if b.Expanded != prevExp {
@@ -290,7 +290,7 @@ func (m *Mapper) toolWidget(it session.Item, exp bool) components.Widget {
 		return &block.BashBlock{
 			Command:  run.Detail,
 			Output:   run.Output,
-			Status:   bashStatus(run.Status),
+			Status:   uiToolStatus(run.Status),
 			ExitCode: run.ExitCode,
 			Expanded: autoExp,
 			Theme:    m.theme,
@@ -373,21 +373,6 @@ func (m *Mapper) fillAgentBlock(a *block.AgentBlock, it session.Item) {
 		a.Expanded = exp
 	} else if a.Status == status.ToolRunning || len(a.Children) > 0 || a.Summary != "" {
 		a.Expanded = true
-	}
-}
-
-func bashStatus(s session.ToolStatus) block.BashStatus {
-	switch s {
-	case session.ToolDone:
-		return block.BashDone
-	case session.ToolError:
-		return block.BashError
-	case session.ToolCancelled:
-		return block.BashCancelled
-	case session.ToolRejected:
-		return block.BashRejected
-	default:
-		return block.BashRunning
 	}
 }
 
