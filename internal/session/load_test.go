@@ -95,6 +95,10 @@ func TestSessionPersistCompaction(t *testing.T) {
 	_, err = m.AppendCompaction(Compaction{
 		Summary:          "conversation summary",
 		FirstKeptEntryID: keptID,
+		Details: CompactionDetails{
+			ReadFiles:     []string{"a.go"},
+			ModifiedFiles: []string{"b.go"},
+		},
 	})
 	require.NoError(t, err)
 	_, err = m.Append(llm.Message{Role: llm.RoleUser, Content: "after"})
@@ -108,6 +112,8 @@ func TestSessionPersistCompaction(t *testing.T) {
 	assert.Equal(t, EntryCompaction, ctx[0].GetType())
 	ce := ctx[0].(CompactionEntry)
 	assert.Equal(t, "conversation summary", ce.Compaction.Summary)
+	assert.Equal(t, []string{"a.go"}, ce.Compaction.Details.ReadFiles)
+	assert.Equal(t, []string{"b.go"}, ce.Compaction.Details.ModifiedFiles)
 
 	got := messageContents(ctx)
 	want := messageContents(m.BuildContext())

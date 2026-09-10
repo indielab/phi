@@ -110,25 +110,13 @@ func PrepareCompact(
 	}, nil
 }
 
-// CompactionResult is the outcome of a compaction run: the generated
-// summary plus the bookkeeping needed to persist the compaction entry.
-type CompactionResult struct {
-	Summary          string
-	FirstKeptEntryID string
-	TokensBefore     int
-	// HookDefinition-specific data (e.g., ArtifactIndex, version markers for structured compaction)
-	Details any
-	// HookDefinition-provided data to persist alongside compaction entry.
-	PreserveData map[string]any
-}
-
 // Compact generates a summary for preparation via llm and returns the
-// resulting CompactionResult.
+// session.Compaction to persist.
 func Compact(
 	ctx context.Context,
 	preparation CompactionPreparation,
 	llm llm.Compactor,
-) (CompactionResult, error) {
+) (session.Compaction, error) {
 	var (
 		summary string
 		err     error
@@ -139,7 +127,7 @@ func Compact(
 		summary, err = summarizeHistory(ctx, preparation, llm)
 	}
 	if err != nil {
-		return CompactionResult{}, err
+		return session.Compaction{}, err
 	}
 
 	readFiles, modifiedFiles := computeFileLists(&preparation.FileOps)
@@ -148,11 +136,14 @@ func Compact(
 		summary += "\n\n" + fileOperations
 	}
 
-	return CompactionResult{
+	return session.Compaction{
 		Summary:          summary,
 		FirstKeptEntryID: preparation.FirstKeptEntryId,
 		TokensBefore:     preparation.TokensBefore,
-		Details:          CompactionDetails{ReadFiles: readFiles, ModifiedFiles: modifiedFiles},
+		Details: session.CompactionDetails{
+			ReadFiles:     readFiles,
+			ModifiedFiles: modifiedFiles,
+		},
 	}, nil
 }
 
@@ -223,13 +214,6 @@ func summarizeHistory(
 		preparation.MessagesToSummarize,
 		preparation.PreviousSummary,
 	)
-}
-
-// CompactionDetails lists the files read and modified in the summarized
-// history; it is persisted with the compaction entry.
-type CompactionDetails struct {
-	ReadFiles     []string
-	ModifiedFiles []string
 }
 
 func getLastAssistantUsage(entries []session.MessageEntry) llm.Usage {

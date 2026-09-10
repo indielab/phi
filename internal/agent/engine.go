@@ -431,17 +431,12 @@ func (engine *Engine) runCompact(
 		return false, context.Canceled
 	}
 
-	result, err := compaction.Compact(ctx, *prep, engine.client)
+	comp, err := compaction.Compact(ctx, *prep, engine.client)
 	if err != nil {
 		_ = yield(session.CompactionComplete{ID: id, Failed: true}, nil)
 		return false, err
 	}
-	if err := engine.session.AppendCompaction(session.Compaction{
-		Summary:          result.Summary,
-		FirstKeptEntryID: result.FirstKeptEntryID,
-		TokensBefore:     result.TokensBefore,
-		Details:          result.Details,
-	}); err != nil {
+	if err := engine.session.AppendCompaction(comp); err != nil {
 		_ = yield(session.CompactionComplete{ID: id, Failed: true}, nil)
 		return false, err
 	}
