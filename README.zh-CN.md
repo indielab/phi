@@ -29,6 +29,8 @@
 
 ![phi TUI](assets/image.png)
 
+![phi diff 审阅](assets/diff.png)
+
 你可以通过 [Skills（技能）](#skills技能)、[Extensions（扩展）](#extensions扩展)
 和 [MCP](#mcp) 扩展它——不必做成插件框架。
 
@@ -242,8 +244,6 @@ Anthropic Messages API；其余走 OpenAI 兼容的 `/chat/completions` 路径�
 
 `/diff` 是 TUI 里的全屏 git 审阅——看改动、写行级批注，再把批注交给代理，
 全程不用离开终端。
-
-![phi diff 审阅](assets/diff.png)
 
 | 命令 | 打开内容 |
 | --- | --- |
