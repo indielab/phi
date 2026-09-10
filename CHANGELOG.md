@@ -13,6 +13,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Extensions: `ToolResult.Expanded` opens the TUI tool row by default (e.g. plan
   body). User toggle still wins after the first interaction.
 - CI / `make lint-markdown`: markdownlint on `**/*.md`.
+- TUI `/diff`: full-screen git diff review (working tree / staged / HEAD),
+  line notes in `.phi/review.json`, `a` sends notes to the agent.
 
 ### Changed
 
@@ -24,6 +26,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - Compaction file-op details are a typed `session.CompactionDetails` (not `any`),
   so persist/reload and later compact rounds keep prior read/modified files.
+- `/diff`: cursor movement no longer leaves a blue trail on swept rows; help
+  overlay no longer fills with selection background. Notes autosave; drop
+  unused GitHub-shaped comment fields and the redundant `w` save key.
 
 ### Security
 

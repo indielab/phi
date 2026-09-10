@@ -22,6 +22,7 @@
 - **权限门控** — 危险工具先过 Gate / Ask；代理能碰你的代码树时，安全不是可选项
 - **MCP 不炸上下文** — 随便配多少 MCP 服务器，工具 schema **绝不**进模型 prompt。系统提示只列 **server 名**（像 Skills 目录）；Agent 用三个元工具（`mcp_list` / `mcp_inspect` / `mcp_call`）按需发现再调用；权限仍走 Gate / Ask / Hooks。详见 [MCP](#mcp)
 - **扩展（Go 或 Rust）** — 原生二进制通过 stdin/stdout 讲 **PXB** 协议；官方作者 SDK：Go（[`ext/go`](ext/go)）+ 零依赖 Rust 移植（[`ext/rust`](ext/rust)）：LLM 工具、斜杠命令、事件拦截、确认对话框——无 JSON、无反射。详见 [Extensions（扩展）](#extensions扩展)
+- **TUI 内 diff 审阅** — `/diff` 全屏审阅 git 改动（工作区 / staged / HEAD）：语法高亮、行级批注，按 `a` 发给代理。详见 [Diff 审阅](#diff-审阅)
 - **任意模型** — OpenAI 兼容或 Anthropic，无厂商锁定
 
 ![phi 欢迎界面](assets/phi.png)
@@ -36,6 +37,7 @@
 - [资源占用](#资源占用)
 - [配置](#配置)
 - [交互模式](#交互模式)
+- [Diff 审阅](#diff-审阅)
 - [命令](#命令)
 - [会话](#会话)
 - [无头模式](#无头模式)
@@ -215,7 +217,7 @@ Anthropic Messages API；其余走 OpenAI 兼容的 `/chat/completions` 路径�
 编辑器支持：
 
 - `@` —— 模糊文件选择器（输入 `@` 后开始输入路径）
-- `/` —— 斜杠命令选择器（`/sessions`、`/resume`、`/clear`）
+- `/` —— 斜杠命令选择器（`/sessions`、`/resume`、`/clear`、`/diff`）
 - `?` —— 快捷键帮助选择器（列出 `/`、`!`、`@` 和按键绑定；`Esc` 关闭）
 - `!command` —— 在本地运行 shell 命令，并把输出流式写入对话记录
   （见 [命令](#命令)）
@@ -236,6 +238,23 @@ Anthropic Messages API；其余走 OpenAI 兼容的 `/chat/completions` 路径�
 主题：`Dark`（默认）、`Darcula`、`Pink` 和 `Terminal`，可在面板的
 设置 → 主题中切换。
 
+## Diff 审阅
+
+`/diff` 是 TUI 里的全屏 git 审阅——看改动、写行级批注，再把批注交给代理，
+全程不用离开终端。
+
+![phi diff 审阅](assets/diff.png)
+
+| 命令 | 打开内容 |
+| --- | --- |
+| `/diff` | 工作区（`git diff`） |
+| `/diff staged` | 暂存区 |
+| `/diff HEAD` | 最近一次提交（`git show`） |
+
+斜杠选择器里回车会把 `/diff` 连同一个空格填进输入框（和 `/resume` 一样）；再提交才打开。
+审阅层内：`j`/`k` 移动，`s` 左右对照，`i` 添加/编辑批注，`x` 删除，`a` 发给代理，
+`?` 帮助，`q` / `Esc` 关闭。批注保存在 `.phi/review.json`。
+
 ## 命令
 
 | 命令 | 说明 |
@@ -248,6 +267,7 @@ Anthropic Messages API；其余走 OpenAI 兼容的 `/chat/completions` 路径�
 | `/sessions` | 列出当前目录的会话（TUI 内） |
 | `/resume <id>` | 按 id 或唯一前缀恢复会话（TUI 内） |
 | `/clear` | 开启一个全新的空会话（TUI 内） |
+| `/diff` | 全屏 git 审阅 — 见 [Diff 审阅](#diff-审阅) |
 | `!command` | 在本地运行 shell 命令，把输出流式写入对话记录；`Esc` 取消 |
 
 在 TUI 中，`!command` 通过 `bash -c` 在本地运行——在代理循环之外。它不计入

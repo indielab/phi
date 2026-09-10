@@ -34,6 +34,8 @@ type CommandContext struct {
 	ListExtensions   func() []palette.PaletteCommand
 	AddSkill         func(name string)
 
+	OpenDiff func(args []string) // /diff [staged|HEAD|git-diff-args]
+
 	ModelNames []string
 	SkillPath  string
 }
@@ -52,7 +54,8 @@ type Command struct {
 	// A trailing space means "fill composer, do not auto-submit".
 	Insert string
 	// NeedsArgs means bare "/name" (picker accept or submit) should leave
-	// Insert in the composer so the user can type arguments.
+	// Insert in the composer so the user can type arguments. Optional-arg
+	// commands use a trailing Insert space without NeedsArgs.
 	NeedsArgs bool
 
 	// Run handles slash dispatch (and may be unused for palette-only trees).
@@ -87,9 +90,6 @@ func finalizeSlashInsert(cmd *Command) {
 		}
 	} else if cmd.NeedsArgs && !strings.HasSuffix(cmd.Insert, " ") {
 		cmd.Insert += " "
-	}
-	if strings.HasSuffix(cmd.Insert, " ") {
-		cmd.NeedsArgs = true
 	}
 }
 

@@ -22,6 +22,7 @@ A lean, high-performance terminal coding agent harness in Go — a sibling to Pi
 - **Permission gate** — Gate / Ask before destructive tools fire; safety is not optional when an agent can touch your tree
 - **MCP without context death** — configure as many MCP servers as you want; their tool schemas **never** enter the model prompt. The system prompt lists **server names** only (like the Skills catalog); the agent uses three meta-tools (`mcp_list` / `mcp_inspect` / `mcp_call`) to discover and call on demand. Same Gate / Ask / Hooks path as built-in tools. See [MCP](#mcp)
 - **Extensions (Go or Rust)** — native binaries speak the **PXB** binary protocol over stdin/stdout; official author SDKs for Go ([`ext/go`](ext/go)) and Rust ([`ext/rust`](ext/rust)): LLM tools, slash commands, event intercepts, confirm dialogs — no reflection; JSON at the SDK edges via `serde_json`. See [Extensions](#extensions)
+- **In-TUI diff review** — `/diff` opens a full-screen git review (working tree / staged / HEAD): syntax-highlighted hunks, line notes, then `a` sends notes to the agent. See [Diff review](#diff-review)
 - **Any model** — OpenAI-compatible or Anthropic, no vendor lock-in
 
 ![phi welcome](assets/phi.png)
@@ -33,6 +34,7 @@ A lean, high-performance terminal coding agent harness in Go — a sibling to Pi
 - [Footprint](#footprint)
 - [Configuration](#configuration)
 - [Interactive mode](#interactive-mode)
+- [Diff review](#diff-review)
 - [Commands](#commands)
 - [Sessions](#sessions)
 - [Headless mode](#headless-mode)
@@ -214,7 +216,7 @@ syntax highlighting. Structural markers (`#`, `` ` ``, `*`) are stripped.
 The editor supports:
 
 - `@` — fuzzy file mention picker (type `@` and start typing a path)
-- `/` — slash command picker (`/sessions`, `/resume`, `/clear`)
+- `/` — slash command picker (`/sessions`, `/resume`, `/clear`, `/diff`)
 - `?` — shortcut help picker (lists `/`, `!`, `@`, and key bindings; `Esc` closes)
 - `!command` — run a shell command locally and stream its output into the
   transcript (see [Commands](#commands))
@@ -235,6 +237,24 @@ The editor supports:
 Themes: `Dark` (default), `Darcula`, `Pink`, and `Terminal`, switchable from
 the palette under settings → theme.
 
+## Diff review
+
+`/diff` is a full-screen git review inside the TUI — read the change, leave
+line notes, then hand them to the agent without leaving the terminal.
+
+![phi diff review](assets/diff.png)
+
+| Command | What opens |
+| --- | --- |
+| `/diff` | Working tree (`git diff`) |
+| `/diff staged` | Staged changes |
+| `/diff HEAD` | Last commit (`git show`) |
+
+Slash-picker Enter inserts `/diff` plus a trailing space into the composer
+(same pattern as `/resume`); submit to open. Inside the overlay: `j`/`k` move,
+`s` side-by-side, `i` add/edit a note, `x` delete, `a` send notes to the agent,
+`?` help, `q` / `Esc` close. Notes persist under `.phi/review.json`.
+
 ## Commands
 
 | Command            | Description                                   |
@@ -247,6 +267,7 @@ the palette under settings → theme.
 | `/sessions`        | List sessions for this directory (TUI)        |
 | `/resume <id>`     | Resume a session by id or unique prefix (TUI) |
 | `/clear`           | Start a fresh empty session (TUI)             |
+| `/diff`            | Full-screen git review — see [Diff review](#diff-review) |
 | `!command`         | Run a shell command locally, stream output into the transcript; `Esc` cancels it |
 
 In the TUI, `!command` runs locally via `bash -c` — outside the agent loop. It

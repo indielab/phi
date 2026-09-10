@@ -158,7 +158,7 @@ func TestSkillsCommand_Empty(t *testing.T) {
 func TestFilterSlashCommands(t *testing.T) {
 	r := NewBuiltinRegistry()
 	all := r.FilterSlash("")
-	require.Len(t, all, 3)
+	require.Len(t, all, 4)
 
 	resu := r.FilterSlash("resu")
 	require.Len(t, resu, 1)
@@ -175,6 +175,7 @@ func TestFilterSlashCommands(t *testing.T) {
 	assert.Equal(t, "/resume ", r.LookupInsert("resume"))
 	assert.Equal(t, "/sessions", r.LookupInsert("sessions"))
 	assert.Equal(t, "/clear", r.LookupInsert("clear"))
+	assert.Equal(t, "/diff ", r.LookupInsert("diff"))
 }
 
 func TestCommandRegistry_DispatchSlash(t *testing.T) {
@@ -203,6 +204,16 @@ func TestCommandRegistry_DispatchSlash(t *testing.T) {
 
 	assert.True(t, r.DispatchSlash("/clear", ctx))
 	assert.Equal(t, 1, cleared)
+
+	var spec []string
+	ctx.OpenDiff = func(args []string) { spec = append([]string(nil), args...) }
+	assert.True(t, r.DispatchSlash("/diff staged", ctx))
+	assert.Equal(t, []string{"staged"}, spec)
+
+	_, incomplete := r.IncompleteSlash("/diff")
+	assert.False(t, incomplete, "diff args are optional; bare /diff should run")
+	assert.True(t, r.DispatchSlash("/diff", ctx))
+	assert.Empty(t, spec)
 
 	assert.False(t, r.DispatchSlash("/unknown", ctx))
 	assert.False(t, r.DispatchSlash("not-slash", ctx))
