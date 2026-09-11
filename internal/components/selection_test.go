@@ -3,6 +3,8 @@ package components
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/xui"
 )
 
@@ -11,13 +13,9 @@ func TestExtractSurfaceText(t *testing.T) {
 	s.Print(0, 0, "hello", xui.Style{}, xui.WidthUnicode)
 	s.Print(0, 1, "world", xui.Style{}, xui.WidthUnicode)
 	got := ExtractSurfaceText(s, 0, 0, 4, 1)
-	if got != "hello\nworld" {
-		t.Fatalf("got %q", got)
-	}
+	require.Equal(t, "hello\nworld", got)
 	partial := ExtractSurfaceText(s, 1, 0, 3, 0)
-	if partial != "ell" {
-		t.Fatalf("partial=%q", partial)
-	}
+	require.Equal(t, "ell", partial)
 }
 
 func TestExtractSurfaceTextCJKNoContinuationSpaces(t *testing.T) {
@@ -27,14 +25,10 @@ func TestExtractSurfaceTextCJKNoContinuationSpaces(t *testing.T) {
 	s.Print(0, 0, "二进制文件 phi", xui.Style{}, xui.WidthUnicode)
 	got := ExtractSurfaceText(s, 0, 0, 19, 0)
 	want := "二进制文件 phi"
-	if got != want {
-		t.Fatalf("got %q, want %q", got, want)
-	}
+	require.Equal(t, want, got)
 	// Selecting only the trail half of the first glyph still yields the rune.
 	half := ExtractSurfaceText(s, 1, 0, 1, 0)
-	if half != "二" {
-		t.Fatalf("half-select=%q, want 二", half)
-	}
+	require.Equal(t, "二", half)
 }
 
 func TestExtractSurfaceTextSkipsRuleChrome(t *testing.T) {
@@ -43,19 +37,11 @@ func TestExtractSurfaceTextSkipsRuleChrome(t *testing.T) {
 	s.SetCell(1, 0, xui.Cell{Char: " ", Width: 1})
 	s.Print(2, 0, "你好", xui.Style{}, xui.WidthUnicode)
 	got := ExtractSurfaceText(s, 0, 0, 19, 0)
-	if got != "你好" {
-		t.Fatalf("got %q, want 你好", got)
-	}
+	require.Equal(t, "你好", got)
 }
 
 func TestInTextSelection(t *testing.T) {
-	if !InTextSelection(2, 0, 0, 0, 5, 0) {
-		t.Fatal("mid single line")
-	}
-	if InTextSelection(0, 1, 2, 0, 5, 0) {
-		t.Fatal("below single line")
-	}
-	if !InTextSelection(0, 1, 2, 0, 3, 2) {
-		t.Fatal("middle of multi-line")
-	}
+	require.True(t, InTextSelection(2, 0, 0, 0, 5, 0), "mid single line")
+	require.False(t, InTextSelection(0, 1, 2, 0, 5, 0), "below single line")
+	require.True(t, InTextSelection(0, 1, 2, 0, 3, 2), "middle of multi-line")
 }

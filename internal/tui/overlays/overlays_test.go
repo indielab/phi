@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/pulseaiclub/xui"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pulseaiclub/phi/internal/components"
 	"github.com/pulseaiclub/phi/internal/permission"
@@ -24,26 +25,16 @@ func TestResolvePermissionSendsReply(t *testing.T) {
 		Reason:    "needs approval",
 		PermReply: reply,
 	})
-	if o.perm == nil {
-		t.Fatal("expected permAsk")
-	}
-	if o.perm.header != "Run this command?" {
-		t.Fatalf("header=%q", o.perm.header)
-	}
-	if activity.Current != controller.ActivityAwaitingApproval {
-		t.Fatalf("activity=%v", activity.Current)
-	}
+	require.NotNil(t, o.perm, "expected permAsk")
+	require.Equal(t, "Run this command?", o.perm.header)
+	require.Equal(t, controller.ActivityAwaitingApproval, activity.Current)
 	o.resolvePermission(controller.AskReply{Approved: true})
-	if o.perm != nil {
-		t.Fatal("expected cleared")
-	}
+	require.Nil(t, o.perm, "expected cleared")
 	select {
 	case r := <-reply:
-		if !r.Approved {
-			t.Fatal("want approved")
-		}
+		require.True(t, r.Approved, "want approved")
 	default:
-		t.Fatal("expected reply")
+		require.Fail(t, "expected reply")
 	}
 }
 
@@ -56,15 +47,12 @@ func TestPermissionDenyWithFeedback(t *testing.T) {
 		PermReply: reply,
 	})
 	o.acceptPermissionOption(askOptDenyFeedback)
-	if o.perm == nil || !o.perm.feedbackMode {
-		t.Fatal("expected feedback mode")
-	}
+	require.True(t, o.perm != nil && o.perm.feedbackMode, "expected feedback mode")
 	o.perm.feedback = "use docs instead"
 	o.resolvePermission(controller.AskReply{Feedback: o.perm.feedback})
 	r := <-reply
-	if r.Approved || r.Feedback != "use docs instead" {
-		t.Fatalf("got %+v", r)
-	}
+	require.False(t, r.Approved)
+	require.Equal(t, "use docs instead", r.Feedback)
 }
 
 func TestPermissionDismissClearsOverlay(t *testing.T) {
@@ -76,12 +64,10 @@ func TestPermissionDismissClearsOverlay(t *testing.T) {
 		PermReply: reply,
 	})
 	o.Apply(controller.OverlayMsg{Kind: controller.OverlayPermissionDismiss})
-	if o.perm != nil {
-		t.Fatal("overlay should clear without consuming reply")
-	}
+	require.Nil(t, o.perm, "overlay should clear without consuming reply")
 	select {
 	case <-reply:
-		t.Fatal("dismiss must not send on reply")
+		require.Fail(t, "dismiss must not send on reply")
 	default:
 	}
 }
@@ -99,16 +85,14 @@ func TestDrawPermissionAskReplacesComposerSlot(t *testing.T) {
 		Max:    components.Size{Width: 60, Height: 12},
 		Method: 0,
 	}, 60, 12)
-	if surf.Size.Width != 60 || surf.Size.Height != 12 {
-		t.Fatalf("size=%v", surf.Size)
-	}
+	require.Equal(t, 60, surf.Size.Width)
+	require.Equal(t, 12, surf.Size.Height)
 }
 
 func TestFormatAskHeader(t *testing.T) {
 	h, d := formatAskHeader(permission.Request{Action: permission.ActionWrite, Paths: []string{"/tmp/a"}})
-	if h != "Allow creating file:" || d != "/tmp/a" {
-		t.Fatalf("%q %q", h, d)
-	}
+	require.Equal(t, "Allow creating file:", h)
+	require.Equal(t, "/tmp/a", d)
 }
 
 func TestContinueAskResolveContinue(t *testing.T) {
@@ -120,26 +104,16 @@ func TestContinueAskResolveContinue(t *testing.T) {
 		MaxRounds: 64,
 		ContReply: reply,
 	})
-	if o.cont == nil {
-		t.Fatal("expected continueAsk")
-	}
-	if o.cont.maxRounds != 64 {
-		t.Fatalf("maxRounds=%d", o.cont.maxRounds)
-	}
-	if activity.Current != controller.ActivityAwaitingApproval {
-		t.Fatalf("activity=%v", activity.Current)
-	}
+	require.NotNil(t, o.cont, "expected continueAsk")
+	require.Equal(t, 64, o.cont.maxRounds)
+	require.Equal(t, controller.ActivityAwaitingApproval, activity.Current)
 	o.resolveContinue(controller.ContinueReply{Continue: true})
-	if o.cont != nil {
-		t.Fatal("expected continueAsk cleared")
-	}
+	require.Nil(t, o.cont, "expected continueAsk cleared")
 	select {
 	case r := <-reply:
-		if !r.Continue {
-			t.Fatal("expected Continue=true")
-		}
+		require.True(t, r.Continue, "expected Continue=true")
 	default:
-		t.Fatal("expected reply")
+		require.Fail(t, "expected reply")
 	}
 }
 
@@ -155,11 +129,9 @@ func TestContinueAskEscapeStops(t *testing.T) {
 	_ = o.handleContinueKey(ctx, xui.KeyEvent{Press: true, Code: xui.KeyEscape})
 	select {
 	case r := <-reply:
-		if r.Continue {
-			t.Fatal("escape should stop")
-		}
+		require.False(t, r.Continue, "escape should stop")
 	default:
-		t.Fatal("expected reply on escape")
+		require.Fail(t, "expected reply on escape")
 	}
 }
 
@@ -172,12 +144,10 @@ func TestContinueDismissClearsOverlay(t *testing.T) {
 		ContReply: reply,
 	})
 	o.Apply(controller.OverlayMsg{Kind: controller.OverlayContinueDismiss})
-	if o.cont != nil {
-		t.Fatal("overlay should clear without consuming reply")
-	}
+	require.Nil(t, o.cont, "overlay should clear without consuming reply")
 	select {
 	case <-reply:
-		t.Fatal("dismiss must not send on reply")
+		require.Fail(t, "dismiss must not send on reply")
 	default:
 	}
 }

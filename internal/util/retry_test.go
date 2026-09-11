@@ -2,7 +2,6 @@ package util
 
 import (
 	"context"
-	"errors"
 	"io"
 	"math"
 	"net/http"
@@ -11,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseRetryAfter(t *testing.T) {
@@ -40,9 +41,8 @@ func TestParseRetryAfter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, valid := parseRetryAfter(tt.value, now)
-			if got != tt.want || valid != tt.valid {
-				t.Fatalf("parseRetryAfter(%q) = (%s, %t), want (%s, %t)", tt.value, got, valid, tt.want, tt.valid)
-			}
+			require.Equal(t, tt.want, got, "parseRetryAfter(%q) duration", tt.value)
+			require.Equal(t, tt.valid, valid, "parseRetryAfter(%q) valid", tt.value)
 		})
 	}
 }
@@ -66,9 +66,14 @@ func TestRetryDelayFallbackAndHeaderPrecedence(t *testing.T) {
 			if tt.header != "" {
 				resp = &http.Response{Header: http.Header{"Retry-After": []string{tt.header}}}
 			}
-			if got := retryDelay(resp, tt.attempt); got != tt.wantDelay {
-				t.Fatalf("retryDelay(attempt=%d, header=%q) = %s, want %s", tt.attempt, tt.header, got, tt.wantDelay)
-			}
+			require.Equal(
+				t,
+				tt.wantDelay,
+				retryDelay(resp, tt.attempt),
+				"retryDelay(attempt=%d, header=%q)",
+				tt.attempt,
+				tt.header,
+			)
 		})
 	}
 }
@@ -173,35 +178,30 @@ func TestDoWithRetryRetryAfterBehavior(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), tt.timeout)
 			defer cancel()
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, http.NoBody)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 
 			resp, err := DoWithRetry(server.Client(), req)
 			if tt.wantErr {
-				if err == nil || !errors.Is(err, context.DeadlineExceeded) {
-					t.Fatalf("DoWithRetry error = %v, want context deadline exceeded", err)
-				}
+				require.Error(t, err, "DoWithRetry should return error")
+				require.ErrorIs(
+					t,
+					err,
+					context.DeadlineExceeded,
+					"DoWithRetry error = %v, want context deadline exceeded",
+					err,
+				)
 				if resp != nil {
 					resp.Body.Close()
-					t.Fatal("DoWithRetry returned a response with an error")
+					require.Fail(t, "DoWithRetry returned a response with an error")
 				}
 			} else {
-				if err != nil {
-					t.Fatalf("DoWithRetry returned error: %v", err)
-				}
-				if resp == nil {
-					t.Fatal("DoWithRetry returned nil response")
-				}
-				if resp.StatusCode != tt.wantStatus {
-					t.Fatalf("status = %d, want %d", resp.StatusCode, tt.wantStatus)
-				}
+				require.NoError(t, err, "DoWithRetry returned error")
+				require.NotNil(t, resp, "DoWithRetry returned nil response")
+				require.Equal(t, tt.wantStatus, resp.StatusCode, "status mismatch")
 				_ = resp.Body.Close()
 			}
 
-			if got := requests.Load(); got != tt.wantRequests {
-				t.Fatalf("requests = %d, want %d", got, tt.wantRequests)
-			}
+			require.Equal(t, tt.wantRequests, requests.Load(), "requests mismatch")
 		})
 	}
 }

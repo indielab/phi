@@ -3,8 +3,9 @@ package mcp_test
 import (
 	"encoding/json"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/pulseaiclub/phi/internal/mcp"
 )
@@ -18,34 +19,20 @@ func TestConfigLoadSave(t *testing.T) {
 		Command:   []string{"npx"},
 		Args:      []string{"-y", "pkg"},
 	}
-	if err := mcp.AddServer("demo", cfg); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, mcp.AddServer("demo", cfg))
 
 	servers, err := mcp.Load(filepath.Join(t.TempDir(), ".phi", "mcp.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := servers["demo"]; !ok {
-		t.Fatal("expected demo server")
-	}
-	if got := servers["demo"].Command; len(got) != 1 || got[0] != "npx" {
-		t.Fatalf("command = %v", got)
-	}
+	require.NoError(t, err)
+	require.Contains(t, servers, "demo", "expected demo server")
+	require.Equal(t, []string{"npx"}, servers["demo"].Command, "command mismatch")
 
 	ok, err := mcp.RemoveServer("demo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok {
-		t.Fatal("expected remove ok")
-	}
+	require.NoError(t, err)
+	require.True(t, ok, "expected remove ok")
 }
 
 func TestCompactAndSlim(t *testing.T) {
-	if got := mcp.CompactServerList([]string{"a", "b"}); got != "a b" {
-		t.Fatalf("got %q", got)
-	}
+	require.Equal(t, "a b", mcp.CompactServerList([]string{"a", "b"}))
 	tools := []mcp.ToolDef{
 		{
 			Name:        "echo",
@@ -55,25 +42,16 @@ func TestCompactAndSlim(t *testing.T) {
 			),
 		},
 	}
-	if got := mcp.CompactToolNames(tools); got != "echo" {
-		t.Fatalf("got %q", got)
-	}
+	require.Equal(t, "echo", mcp.CompactToolNames(tools))
 	slim := mcp.SlimTool(tools[0])
-	if !strings.Contains(slim, "echo") || !strings.Contains(slim, "message:s*") {
-		t.Fatalf("slim = %q", slim)
-	}
+	require.Contains(t, slim, "echo")
+	require.Contains(t, slim, "message:s*")
 }
 
 func TestDisabled(t *testing.T) {
 	t.Setenv("PHI_MCP", "off")
-	if !mcp.Disabled() {
-		t.Fatal("expected disabled")
-	}
+	require.True(t, mcp.Disabled(), "expected disabled")
 	pool, err := mcp.LoadPool(filepath.Join(t.TempDir(), ".phi", "mcp.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if pool != nil {
-		t.Fatal("expected nil pool")
-	}
+	require.NoError(t, err)
+	require.Nil(t, pool, "expected nil pool")
 }

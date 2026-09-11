@@ -4,65 +4,54 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCappedBufferKeepsNewestTail(t *testing.T) {
 	cb := newCappedBuffer(32)
 	full := strings.Repeat("0123456789", 100)
 	for range 100 {
-		if _, err := cb.Write([]byte("0123456789")); err != nil {
-			t.Fatal(err)
-		}
+		_, err := cb.Write([]byte("0123456789"))
+		require.NoError(t, err)
 	}
-	got := cb.String()
-	if want := full[len(full)-32:]; got != want {
-		t.Fatalf("want the newest 32 bytes %q, got %q", want, got)
-	}
-	if !cb.Truncated() {
-		t.Fatal("want truncated")
-	}
+	require.Equal(t, full[len(full)-32:], cb.String(), "want the newest 32 bytes")
+	require.True(t, cb.Truncated(), "want truncated")
 }
 
 func TestBashOutputTailKeepsNewestLinesAndBytes(t *testing.T) {
 	tail := NewBashOutputTail(3, 64)
-	if _, err := tail.WriteString("one\ntwo\nthree\nfour\n"); err != nil {
-		t.Fatal(err)
-	}
+	_, err := tail.WriteString("one\ntwo\nthree\nfour\n")
+	require.NoError(t, err)
 	got, truncated := tail.Snapshot()
-	if want := "two\nthree\nfour\n"; got != want || !truncated {
-		t.Fatalf("got %q truncated=%v, want %q and truncation", got, truncated, want)
-	}
+	require.Equal(t, "two\nthree\nfour\n", got)
+	require.True(t, truncated)
 
 	tail = NewBashOutputTail(100, 10)
-	if _, err := tail.WriteString("0123456789ABC"); err != nil {
-		t.Fatal(err)
-	}
+	_, err = tail.WriteString("0123456789ABC")
+	require.NoError(t, err)
 	got, truncated = tail.Snapshot()
-	if got != "3456789ABC" || !truncated {
-		t.Fatalf("got %q truncated=%v, want newest 10 bytes", got, truncated)
-	}
+	require.Equal(t, "3456789ABC", got)
+	require.True(t, truncated, "want newest 10 bytes")
 }
 
 func TestCappedBufferNoTruncationUnderLimit(t *testing.T) {
 	cb := newCappedBuffer(64)
 	data := "hello world"
-	if _, err := cb.Write([]byte(data)); err != nil {
-		t.Fatal(err)
-	}
-	if cb.String() != data || cb.Truncated() {
-		t.Fatalf("got %q truncated=%v", cb.String(), cb.Truncated())
-	}
+	_, err := cb.Write([]byte(data))
+	require.NoError(t, err)
+	require.Equal(t, data, cb.String())
+	require.False(t, cb.Truncated())
 }
 
 func TestCappedBufferExactLimit(t *testing.T) {
 	cb := newCappedBuffer(10)
 	data := "0123456789"
-	if _, err := cb.Write([]byte(data)); err != nil {
-		t.Fatal(err)
-	}
-	if cb.String() != data || cb.Truncated() {
-		t.Fatalf("got %q truncated=%v", cb.String(), cb.Truncated())
-	}
+	_, err := cb.Write([]byte(data))
+	require.NoError(t, err)
+	require.Equal(t, data, cb.String())
+	require.False(t, cb.Truncated())
 }
 
 func TestCappedBufferConcurrentWrites(t *testing.T) {
@@ -80,7 +69,6 @@ func TestCappedBufferConcurrentWrites(t *testing.T) {
 		}(g)
 	}
 	wg.Wait()
-	if len(cb.String()) != 1024 || !cb.Truncated() {
-		t.Fatalf("len=%d truncated=%v", len(cb.String()), cb.Truncated())
-	}
+	assert.Len(t, cb.String(), 1024)
+	assert.True(t, cb.Truncated())
 }

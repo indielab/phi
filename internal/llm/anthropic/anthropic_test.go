@@ -18,32 +18,20 @@ func TestBuildRequestSystemIsArray(t *testing.T) {
 	}, nil)
 
 	body, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
+	require.NoError(t, err)
 
 	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(body, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(body, &raw))
 
 	systemRaw, ok := raw["system"]
-	if !ok {
-		t.Fatal("expected system field in request body")
-	}
+	require.True(t, ok, "expected system field in request body")
 	var asBlocks []sysBlock
-	if err := json.Unmarshal(systemRaw, &asBlocks); err != nil {
-		t.Fatalf("system must be an array, got: %s", string(systemRaw))
-	}
-	if len(asBlocks) != 1 {
-		t.Fatalf("expected 1 system block, got %d", len(asBlocks))
-	}
-	if asBlocks[0].Type != "text" || !strings.Contains(asBlocks[0].Text, "helpful") {
-		t.Fatalf("unexpected system block: %+v", asBlocks[0])
-	}
-	if asBlocks[0].CacheControl == nil {
-		t.Fatal("expected cache_control on system block")
-	}
+	err = json.Unmarshal(systemRaw, &asBlocks)
+	require.NoError(t, err, "system must be an array, got: %s", string(systemRaw))
+	require.Len(t, asBlocks, 1)
+	require.Equal(t, "text", asBlocks[0].Type)
+	require.Contains(t, asBlocks[0].Text, "helpful")
+	require.NotNil(t, asBlocks[0].CacheControl, "expected cache_control on system block")
 }
 
 func TestBuildRequestMergesToolResults(t *testing.T) {
@@ -63,36 +51,21 @@ func TestBuildRequestMergesToolResults(t *testing.T) {
 		{Role: llm.RoleTool, ToolCallID: "call_03", Content: "c"},
 	}, nil)
 
-	if len(req.Messages) != 3 {
-		t.Fatalf("expected 3 messages, got %d", len(req.Messages))
-	}
+	require.Len(t, req.Messages, 3)
 
 	results, ok := req.Messages[2].Content.([]anthropicContentBlock)
-	if !ok {
-		t.Fatalf("expected tool results as content blocks, got %T", req.Messages[2].Content)
-	}
-	if len(results) != 3 {
-		t.Fatalf("expected 3 merged tool_result blocks, got %d", len(results))
-	}
+	require.True(t, ok, "expected tool results as content blocks, got %T", req.Messages[2].Content)
+	require.Len(t, results, 3)
 	for i, wantID := range []string{"call_01", "call_02", "call_03"} {
-		if results[i].Type != "tool_result" {
-			t.Fatalf("block %d: expected tool_result, got %s", i, results[i].Type)
-		}
-		if results[i].ToolUseID != wantID {
-			t.Fatalf("block %d: expected tool_use_id %s, got %s", i, wantID, results[i].ToolUseID)
-		}
+		require.Equal(t, "tool_result", results[i].Type, "block %d", i)
+		require.Equal(t, wantID, results[i].ToolUseID, "block %d", i)
 	}
 
 	body, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	if strings.Count(string(body), `"tool_result"`) != 3 {
-		t.Fatalf("expected 3 tool_result entries in JSON, got: %s", string(body))
-	}
-	if strings.Count(string(body), `"role":"user"`) != 2 {
-		t.Fatalf("expected 2 user messages (prompt + tool results), got: %s", string(body))
-	}
+	require.NoError(t, err)
+	sbody := string(body)
+	require.Equal(t, 3, strings.Count(sbody, `"tool_result"`))
+	require.Equal(t, 2, strings.Count(sbody, `"role":"user"`))
 }
 
 func TestBuildRequestUserImages(t *testing.T) {
@@ -156,18 +129,10 @@ func TestBuildRequestToolsSchema(t *testing.T) {
 	}}
 
 	req := BuildRequest(cfg, "", []llm.Message{{Role: llm.RoleUser, Content: "hi"}}, tools)
-	if len(req.Tools) != 1 {
-		t.Fatalf("expected 1 tool, got %d", len(req.Tools))
-	}
-	if req.Tools[0].Name != "read" {
-		t.Fatalf("unexpected tool name: %s", req.Tools[0].Name)
-	}
-	if !strings.Contains(string(req.Tools[0].InputSchema), `"required"`) {
-		t.Fatalf("input_schema missing required list: %s", string(req.Tools[0].InputSchema))
-	}
-	if req.Tools[0].CacheControl == nil {
-		t.Fatal("expected cache_control on last tool")
-	}
+	require.Len(t, req.Tools, 1)
+	require.Equal(t, "read", req.Tools[0].Name)
+	require.Contains(t, string(req.Tools[0].InputSchema), `"required"`)
+	require.NotNil(t, req.Tools[0].CacheControl, "expected cache_control on last tool")
 }
 
 func TestProcessStreamTextAndUsage(t *testing.T) {
@@ -191,9 +156,7 @@ func TestProcessStreamTextAndUsage(t *testing.T) {
 	var text strings.Builder
 	var done *llm.StreamEvent
 	for _, ev := range events {
-		if ev.Type == llm.StreamEventTypeError {
-			t.Fatalf("stream error: %s", ev.Err)
-		}
+		require.NotEqual(t, llm.StreamEventTypeError, ev.Type, "stream error: %s", ev.Err)
 		switch ev.Type {
 		case llm.StreamEventTypeDelta:
 			text.WriteString(ev.Delta.Content)
@@ -202,23 +165,14 @@ func TestProcessStreamTextAndUsage(t *testing.T) {
 		}
 	}
 
-	if text.String() != "Hello world" {
-		t.Fatalf("expected delta text 'Hello world', got %q", text.String())
-	}
-	if done == nil {
-		t.Fatal("expected done event")
-	}
+	require.Equal(t, "Hello world", text.String())
+	require.NotNil(t, done, "expected done event")
 	msg := done.Partial.Choices[0].Message
-	if msg.Content != "Hello world" {
-		t.Fatalf("expected content 'Hello world', got %q", msg.Content)
-	}
-	if done.Partial.Usage.PromptTokens != 962 || done.Partial.Usage.CompletionTokens != 7 ||
-		done.Partial.Usage.TotalTokens != 969 {
-		t.Fatalf("unexpected usage: %+v", done.Partial.Usage)
-	}
-	if done.Partial.Usage.CachedTokens() != 900 {
-		t.Fatalf("expected cached tokens 900, got %d", done.Partial.Usage.CachedTokens())
-	}
+	require.Equal(t, "Hello world", msg.Content)
+	require.Equal(t, 962, done.Partial.Usage.PromptTokens, "PromptTokens")
+	require.Equal(t, 7, done.Partial.Usage.CompletionTokens, "CompletionTokens")
+	require.Equal(t, 969, done.Partial.Usage.TotalTokens, "TotalTokens")
+	require.Equal(t, 900, done.Partial.Usage.CachedTokens())
 }
 
 func TestProcessStreamToolUseAndThinking(t *testing.T) {
@@ -244,9 +198,7 @@ func TestProcessStreamToolUseAndThinking(t *testing.T) {
 	var thinking, args string
 	var done *llm.StreamEvent
 	for _, ev := range events {
-		if ev.Type == llm.StreamEventTypeError {
-			t.Fatalf("stream error: %s", ev.Err)
-		}
+		require.NotEqual(t, llm.StreamEventTypeError, ev.Type, "stream error: %s", ev.Err)
 		switch ev.Type {
 		case llm.StreamEventTypeDelta:
 			thinking += ev.Delta.ReasoningContent
@@ -258,29 +210,17 @@ func TestProcessStreamToolUseAndThinking(t *testing.T) {
 		}
 	}
 
-	if thinking != "let me think" {
-		t.Fatalf("expected thinking 'let me think', got %q", thinking)
-	}
-	if done == nil {
-		t.Fatal("expected done event")
-	}
+	require.Equal(t, "let me think", thinking)
+	require.NotNil(t, done, "expected done event")
 	msg := done.Partial.Choices[0].Message
-	if msg.ReasoningContent != "let me think" {
-		t.Fatalf("expected reasoning in final message, got %q", msg.ReasoningContent)
-	}
-	if len(msg.ToolCalls) != 1 {
-		t.Fatalf("expected 1 tool call, got %d", len(msg.ToolCalls))
-	}
+	require.Equal(t, "let me think", msg.ReasoningContent)
+	require.Len(t, msg.ToolCalls, 1)
 	tc := msg.ToolCalls[0]
-	if tc.ID != "toolu_01" || tc.Function.Name != "read" {
-		t.Fatalf("unexpected tool call: %+v", tc)
-	}
-	if tc.Function.Arguments != `{"path":"a.go"}` {
-		t.Fatalf("expected accumulated args, got %q", tc.Function.Arguments)
-	}
-	if args != `{"path":"a.go"}` {
-		t.Fatalf("expected delta tool args, got %q", args)
-	}
+	require.Equal(t, "toolu_01", tc.ID)
+	require.Equal(t, "read", tc.Function.Name)
+	// Fragments are concatenated, not remarshaled. JSONEq would hide whitespace/key-order drift.
+	require.Equal(t, `{"path":"a.go"}`, tc.Function.Arguments) //nolint:testifylint // json-eq
+	require.Equal(t, `{"path":"a.go"}`, args)                  //nolint:testifylint // json-eq
 }
 
 func TestNormalizeBaseURL(t *testing.T) {
@@ -292,9 +232,7 @@ func TestNormalizeBaseURL(t *testing.T) {
 		{"http://localhost:8080", "http://localhost:8080/v1"},
 	}
 	for _, c := range cases {
-		if got := normalizeBaseURL(c.in); got != c.want {
-			t.Fatalf("normalizeBaseURL(%q) = %q, want %q", c.in, got, c.want)
-		}
+		require.Equal(t, c.want, normalizeBaseURL(c.in), "normalizeBaseURL(%q)", c.in)
 	}
 }
 

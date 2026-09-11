@@ -134,7 +134,7 @@ func TestUpdateUpToDate(t *testing.T) {
 			return githubrelease.Release{TagName: "v2.0.0"}, nil
 		},
 		DownloadFile: func(context.Context, string, string) error {
-			t.Fatal("no download when up to date")
+			require.Fail(t, "no download when up to date")
 			return nil
 		},
 	})
@@ -161,7 +161,7 @@ func TestUpdateCheckOnlyDoesNotInstall(t *testing.T) {
 			return githubrelease.Release{TagName: "v2.0.0"}, nil
 		},
 		DownloadFile: func(context.Context, string, string) error {
-			t.Fatal("check must not download")
+			require.Fail(t, "check must not download")
 			return nil
 		},
 	})

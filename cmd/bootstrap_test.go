@@ -86,7 +86,7 @@ func TestEnsureSearchToolsAttemptsAllDownloads(t *testing.T) {
 		case <-time.After(time.Second):
 			close(release)
 			<-result
-			t.Fatal("downloads did not start concurrently")
+			require.Fail(t, "downloads did not start concurrently")
 		}
 	}
 	close(release)

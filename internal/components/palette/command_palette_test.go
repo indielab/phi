@@ -6,6 +6,8 @@ import (
 
 	"github.com/pulseaiclub/xui"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/phi/internal/components"
 )
 
@@ -21,21 +23,17 @@ func TestCommandPaletteFilterAndAccept(t *testing.T) {
 		OnAccept: func(c PaletteCommand) { accepted = c.ID },
 	}
 	p.Show()
-	if !p.Open || len(p.filtered) != 3 {
-		t.Fatalf("open=%v filtered=%d", p.Open, len(p.filtered))
-	}
+	require.True(t, p.Open && len(p.filtered) == 3, "open=%v filtered=%d", p.Open, len(p.filtered))
 
 	ctx := &components.EventContext{}
 	for _, r := range "help" {
 		p.Handle(ctx, xui.KeyEvent{Code: xui.KeyRune, Rune: r, Press: true})
 	}
-	if len(p.filtered) != 1 || p.Commands[p.filtered[0]].ID != "2" {
-		t.Fatalf("filter help → %#v", p.filtered)
-	}
+	require.Len(t, p.filtered, 1)
+	require.Equal(t, "2", p.Commands[p.filtered[0]].ID)
 	p.Handle(ctx, xui.KeyEvent{Code: xui.KeyEnter, Press: true})
-	if accepted != "2" || p.Open {
-		t.Fatalf("accept id=%q open=%v", accepted, p.Open)
-	}
+	require.Equal(t, "2", accepted)
+	require.False(t, p.Open)
 }
 
 func TestCommandPaletteDraw(t *testing.T) {
@@ -48,9 +46,7 @@ func TestCommandPaletteDraw(t *testing.T) {
 	}
 	p.Show()
 	s := p.Draw(components.DrawContext{Max: components.Size{Width: 80, Height: 24}, Method: xui.WidthUnicode})
-	if len(s.Children) != 1 {
-		t.Fatalf("children=%d", len(s.Children))
-	}
+	require.Len(t, s.Children, 1)
 	panel := s.Children[0].Surface
 	var b strings.Builder
 	for x := 0; x < panel.Size.Width; x++ {
@@ -61,24 +57,16 @@ func TestCommandPaletteDraw(t *testing.T) {
 		b.WriteString(ch)
 	}
 	top := b.String()
-	if !strings.Contains(top, "Command Palette") {
-		t.Fatalf("missing title: %q", top)
-	}
+	require.Contains(t, top, "Command Palette")
 }
 
 func TestFuzzyMatch(t *testing.T) {
 	ok, _ := fuzzyMatch("", "mode use boost")
-	if !ok {
-		t.Fatal("empty query should match")
-	}
+	require.True(t, ok, "empty query should match")
 	ok, score := fuzzyMatch("boost", "mode use boost")
-	if !ok || score < 0.15 {
-		t.Fatalf("boost score=%v", score)
-	}
+	require.True(t, ok && score >= 0.15, "boost score=%v", score)
 	ok, _ = fuzzyMatch("zzz", "mode use boost")
-	if ok {
-		t.Fatal("zzz should not match")
-	}
+	require.False(t, ok, "zzz should not match")
 }
 
 func TestCommandPaletteNestedSubmenu(t *testing.T) {
@@ -106,14 +94,14 @@ func TestCommandPaletteNestedSubmenu(t *testing.T) {
 		p.Handle(ctx, xui.KeyEvent{Code: xui.KeyRune, Rune: r, Press: true})
 	}
 	p.Handle(ctx, xui.KeyEvent{Code: xui.KeyEnter, Press: true})
-	if !p.Open || p.Title != "Select Theme" || len(p.stack) != 1 {
-		t.Fatalf("expected nested open title=%q stack=%d open=%v", p.Title, len(p.stack), p.Open)
-	}
+	require.True(t, p.Open, "expected nested open title=%q stack=%d open=%v", p.Title, len(p.stack), p.Open)
+	require.Equal(t, "Select Theme", p.Title)
+	require.Len(t, p.stack, 1)
 	// Esc pops back
 	p.Handle(ctx, xui.KeyEvent{Code: xui.KeyEscape, Press: true})
-	if !p.Open || p.Title != "Command Palette" || len(p.stack) != 0 {
-		t.Fatalf("pop failed title=%q stack=%d", p.Title, len(p.stack))
-	}
+	require.True(t, p.Open, "pop failed title=%q stack=%d", p.Title, len(p.stack))
+	require.Equal(t, "Command Palette", p.Title)
+	require.Empty(t, p.stack)
 	// Enter submenu again and pick Dark
 	p.Query = ""
 	p.Cursor = 0
@@ -124,7 +112,6 @@ func TestCommandPaletteNestedSubmenu(t *testing.T) {
 	}
 	p.Handle(ctx, xui.KeyEvent{Code: xui.KeyEnter, Press: true})
 	p.Handle(ctx, xui.KeyEvent{Code: xui.KeyEnter, Press: true}) // first theme
-	if picked != "dark" || p.Open {
-		t.Fatalf("pick=%q open=%v", picked, p.Open)
-	}
+	require.Equal(t, "dark", picked)
+	require.False(t, p.Open)
 }

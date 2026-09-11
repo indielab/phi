@@ -31,7 +31,7 @@ func TestScheduleMentionSearchCancelsPrevious(t *testing.T) {
 	select {
 	case <-firstDone:
 	case <-time.After(time.Second):
-		t.Fatal("scheduling a new search must cancel the previous one")
+		require.Fail(t, "scheduling a new search must cancel the previous one")
 	}
 }
 
@@ -104,7 +104,7 @@ func TestHideCompletersCancelsSearch(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("closing the picker must cancel the search in flight")
+		require.Fail(t, "closing the picker must cancel the search in flight")
 	}
 }
 

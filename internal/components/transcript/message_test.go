@@ -5,6 +5,8 @@ import (
 
 	"github.com/pulseaiclub/xui"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/phi/internal/components"
 )
 
@@ -36,13 +38,10 @@ func TestMessageListBottomPin(t *testing.T) {
 		},
 	}
 	s := list.Draw(components.DrawContext{Max: components.Size{Width: 40, Height: 4}})
-	if len(s.Children) == 0 {
-		t.Fatal("expected visible children")
-	}
+	require.NotEmpty(t, s.Children, "expected visible children")
 	last := s.Children[len(s.Children)-1]
-	if last.Origin.Y+last.Surface.Size.Height > 4 {
-		t.Fatalf("last overflows: origin=%+v h=%d", last.Origin, last.Surface.Size.Height)
-	}
+	require.LessOrEqual(t, last.Origin.Y+last.Surface.Size.Height, 4,
+		"last overflows: origin=%+v h=%d", last.Origin, last.Surface.Size.Height)
 }
 
 func TestMessageListInvalidateHeightsAt(t *testing.T) {
@@ -54,17 +53,15 @@ func TestMessageListInvalidateHeightsAt(t *testing.T) {
 		},
 	}
 	_ = list.Draw(components.DrawContext{Max: components.Size{Width: 40, Height: 20}})
-	if list.CachedHeight(0) != 2 || list.CachedHeight(1) != 3 || list.CachedHeight(2) != 4 {
-		t.Fatalf("heights %d %d %d", list.CachedHeight(0), list.CachedHeight(1), list.CachedHeight(2))
-	}
+	require.Equal(t, 2, list.CachedHeight(0))
+	require.Equal(t, 3, list.CachedHeight(1))
+	require.Equal(t, 4, list.CachedHeight(2))
 	list.InvalidateHeightsAt(1)
-	if list.CachedHeight(0) != 2 || list.CachedHeight(1) != 0 || list.CachedHeight(2) != 4 {
-		t.Fatalf("after invalidate: %d %d %d", list.CachedHeight(0), list.CachedHeight(1), list.CachedHeight(2))
-	}
+	require.Equal(t, 2, list.CachedHeight(0))
+	require.Equal(t, 0, list.CachedHeight(1))
+	require.Equal(t, 4, list.CachedHeight(2))
 	_ = list.Draw(components.DrawContext{Max: components.Size{Width: 40, Height: 20}})
-	if list.CachedHeight(1) != 3 {
-		t.Fatalf("remeasured h=%d", list.CachedHeight(1))
-	}
+	require.Equal(t, 3, list.CachedHeight(1))
 }
 
 func TestMessageListReindexHeights(t *testing.T) {
@@ -85,21 +82,13 @@ func TestMessageListReindexHeights(t *testing.T) {
 		&rowStub{text: "c", h: 3},
 	}
 	list.ReindexHeights(oldIDs, []string{"a", "x", "b", "c"})
-	if list.CachedHeight(0) != 2 || list.CachedHeight(1) != 0 || list.CachedHeight(2) != 5 ||
-		list.CachedHeight(3) != 3 {
-		t.Fatalf(
-			"reindex: %d %d %d %d",
-			list.CachedHeight(0),
-			list.CachedHeight(1),
-			list.CachedHeight(2),
-			list.CachedHeight(3),
-		)
-	}
+	require.Equal(t, 2, list.CachedHeight(0))
+	require.Equal(t, 0, list.CachedHeight(1))
+	require.Equal(t, 5, list.CachedHeight(2))
+	require.Equal(t, 3, list.CachedHeight(3))
 	list.InvalidateHeightsAt(1)
 	_ = list.Draw(components.DrawContext{Max: components.Size{Width: 40, Height: 20}})
-	if list.CachedHeight(1) != 7 {
-		t.Fatalf("new row h=%d", list.CachedHeight(1))
-	}
+	require.Equal(t, 7, list.CachedHeight(1))
 }
 
 func TestMessageListVirtualizes(t *testing.T) {
@@ -111,23 +100,22 @@ func TestMessageListVirtualizes(t *testing.T) {
 	list := &MessageList{Entries: entries}
 	const viewH = 6
 	s := list.Draw(components.DrawContext{Max: components.Size{Width: 40, Height: viewH}})
-	if len(s.Children) >= n {
-		t.Fatalf("expected windowed draw, children=%d for %d entries", len(s.Children), n)
-	}
-	if len(s.Children) > viewH+2 {
-		t.Fatalf("too many realized children: %d (viewH=%d)", len(s.Children), viewH)
-	}
+	require.Less(t, len(s.Children), n, "expected windowed draw, children=%d for %d entries", len(s.Children), n)
+	require.LessOrEqual(
+		t,
+		len(s.Children),
+		viewH+2,
+		"too many realized children: %d (viewH=%d)",
+		len(s.Children),
+		viewH,
+	)
 	first, last := list.VisibleRange()
-	if first < 0 || last < first {
-		t.Fatalf("visible range %d..%d", first, last)
-	}
-	if last != n-1 {
-		t.Fatalf("bottom pin: last visible=%d want %d", last, n-1)
-	}
+	require.GreaterOrEqual(t, first, 0, "visible range %d..%d", first, last)
+	require.GreaterOrEqual(t, last, first, "visible range %d..%d", first, last)
+	require.Equal(t, n-1, last, "bottom pin: last visible=%d want %d", last, n-1)
 	list.ScrollFromBottom = 40
 	s2 := list.Draw(components.DrawContext{Max: components.Size{Width: 40, Height: viewH}})
 	f2, l2 := list.VisibleRange()
-	if len(s2.Children) == 0 || l2 >= n-1 && f2 == first {
-		t.Fatalf("scroll did not move window: %d..%d (was %d..%d)", f2, l2, first, last)
-	}
+	require.NotEmpty(t, s2.Children, "scroll did not move window: %d..%d (was %d..%d)", f2, l2, first, last)
+	require.False(t, l2 >= n-1 && f2 == first, "scroll did not move window: %d..%d (was %d..%d)", f2, l2, first, last)
 }

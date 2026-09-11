@@ -3,6 +3,8 @@ package githubrelease
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestTagVersion(t *testing.T) {
@@ -16,9 +18,7 @@ func TestTagVersion(t *testing.T) {
 		{tag: "1.2.3", want: "1.2.3"},
 	}
 	for _, tt := range tests {
-		if got := TagVersion(tt.tag); got != tt.want {
-			t.Fatalf("TagVersion(%q) = %q, want %q", tt.tag, got, tt.want)
-		}
+		require.Equal(t, tt.want, TagVersion(tt.tag), "TagVersion(%q)", tt.tag)
 	}
 }
 
@@ -26,9 +26,7 @@ func TestDownloadBaseURL(t *testing.T) {
 	t.Parallel()
 	in := "https://github.com/pulseaiclub/phi/releases/tag/v0.1.0"
 	want := "https://github.com/pulseaiclub/phi/releases/download/v0.1.0"
-	if got := DownloadBaseURL(in); got != want {
-		t.Fatalf("DownloadBaseURL() = %q, want %q", got, want)
-	}
+	require.Equal(t, want, DownloadBaseURL(in))
 }
 
 func TestDecodeReleaseIncludesAssets(t *testing.T) {
@@ -43,22 +41,12 @@ func TestDecodeReleaseIncludesAssets(t *testing.T) {
 	}`
 
 	release, err := decodeRelease(strings.NewReader(response))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if release.TagName != "15.2.0" {
-		t.Fatalf("TagName = %q, want 15.2.0", release.TagName)
-	}
-	if len(release.Assets) != 1 {
-		t.Fatalf("len(Assets) = %d, want 1", len(release.Assets))
-	}
+	require.NoError(t, err)
+	require.Equal(t, "15.2.0", release.TagName, "TagName")
+	require.Len(t, release.Assets, 1, "len(Assets)")
 	asset := release.Assets[0]
-	if asset.Name != "ripgrep-15.2.0-x86_64-unknown-linux-musl.tar.gz" {
-		t.Fatalf("asset Name = %q", asset.Name)
-	}
-	if asset.BrowserDownloadURL == "" {
-		t.Fatal("asset BrowserDownloadURL is empty")
-	}
+	require.Equal(t, "ripgrep-15.2.0-x86_64-unknown-linux-musl.tar.gz", asset.Name, "asset Name")
+	require.NotEmpty(t, asset.BrowserDownloadURL, "asset BrowserDownloadURL is empty")
 }
 
 func TestStableReleasesFiltersDraftsAndPrereleases(t *testing.T) {
@@ -70,20 +58,17 @@ func TestStableReleasesFiltersDraftsAndPrereleases(t *testing.T) {
 	]`
 
 	releases, err := decodeReleases(strings.NewReader(response))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	stable := stableReleases(releases)
-	if len(stable) != 1 || stable[0].TagName != "v1.0.0" {
-		t.Fatalf("stableReleases() = %#v, want only v1.0.0", stable)
-	}
+	require.Len(t, stable, 1)
+	require.Equal(t, "v1.0.0", stable[0].TagName)
 }
 
 func TestFetchRecentRejectsInvalidLimit(t *testing.T) {
 	t.Parallel()
 	for _, limit := range []int{0, maxReleasesPerPage + 1} {
 		if _, err := FetchRecent(t.Context(), "owner/repo", limit); err == nil {
-			t.Fatalf("FetchRecent(limit=%d) unexpectedly succeeded", limit)
+			require.Failf(t, "unexpected success", "FetchRecent(limit=%d) unexpectedly succeeded", limit)
 		}
 	}
 }

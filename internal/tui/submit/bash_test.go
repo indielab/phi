@@ -3,6 +3,9 @@ package submit
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBashLiveOutputPublishesTrailingUpdate(t *testing.T) {
@@ -13,18 +16,14 @@ func TestBashLiveOutputPublishesTrailingUpdate(t *testing.T) {
 	t.Cleanup(live.Close)
 
 	live.Append("first")
-	if got := <-updates; got != "first" {
-		t.Fatalf("first update=%q", got)
-	}
+	require.Equal(t, "first", <-updates)
 	live.Append("-second")
 
 	select {
 	case got := <-updates:
-		if got != "first-second" {
-			t.Fatalf("trailing update=%q", got)
-		}
+		require.Equal(t, "first-second", got)
 	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for trailing update")
+		require.Fail(t, "timed out waiting for trailing update")
 	}
 }
 
@@ -41,7 +40,6 @@ func TestBashLiveOutputCloseCancelsTrailingUpdate(t *testing.T) {
 
 	live.mu.Lock()
 	defer live.mu.Unlock()
-	if !live.stopped || live.timer != nil {
-		t.Fatalf("closed live output: stopped=%v timer=%v", live.stopped, live.timer)
-	}
+	require.True(t, live.stopped, "expected stopped=true")
+	assert.Nil(t, live.timer, "expected timer=nil")
 }

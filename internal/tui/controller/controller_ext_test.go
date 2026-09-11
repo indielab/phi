@@ -60,5 +60,5 @@ func assertStatusReset(t *testing.T, bus *Bus) {
 			return
 		}
 	}
-	t.Fatal("expected an extension status reset (ExtSessionEffectsMsg{StatusSet:true, Status:\"\"})")
+	require.Fail(t, "expected an extension status reset (ExtSessionEffectsMsg{StatusSet:true, Status:\"\"})")
 }

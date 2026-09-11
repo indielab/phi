@@ -3,20 +3,16 @@ package tree_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/phi/internal/components/tree"
 )
 
 func TestPrefixForSiblings(t *testing.T) {
 	st := tree.DefaultStyle()
-	if got := tree.PrefixForSiblings(3, 0, st); got != "├── " {
-		t.Fatalf("first: %q", got)
-	}
-	if got := tree.PrefixForSiblings(3, 1, st); got != "├── " {
-		t.Fatalf("mid: %q", got)
-	}
-	if got := tree.PrefixForSiblings(3, 2, st); got != "╰── " {
-		t.Fatalf("last: %q", got)
-	}
+	require.Equal(t, "├── ", tree.PrefixForSiblings(3, 0, st), "first")
+	require.Equal(t, "├── ", tree.PrefixForSiblings(3, 1, st), "mid")
+	require.Equal(t, "╰── ", tree.PrefixForSiblings(3, 2, st), "last")
 }
 
 func TestFlattenNested(t *testing.T) {
@@ -31,17 +27,11 @@ func TestFlattenNested(t *testing.T) {
 		{Item: "b"},
 	}
 	flat := tree.Flatten(roots)
-	if len(flat) != 4 {
-		t.Fatalf("len=%d", len(flat))
-	}
+	require.Len(t, flat, 4)
 	// a2 under a: ancestor a is not last among roots? a is first of 2, so ancestor last=false
 	// Wait: a2's parent walk: when walking a's children, ancestors = [isLast of a among roots] = [false]
 	p := tree.Prefix(flat[2], tree.DefaultStyle()) // a2, last child of a
-	if p != "│   ╰── " {
-		t.Fatalf("nested last under non-last parent: %q", p)
-	}
+	require.Equal(t, "│   ╰── ", p, "nested last under non-last parent")
 	pLast := tree.Prefix(flat[3], tree.DefaultStyle()) // b
-	if pLast != "╰── " {
-		t.Fatalf("root last: %q", pLast)
-	}
+	require.Equal(t, "╰── ", pLast, "root last")
 }

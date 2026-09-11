@@ -3,6 +3,8 @@ package controller_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/phi/internal/job"
 	"github.com/pulseaiclub/phi/internal/session"
 	"github.com/pulseaiclub/phi/internal/tui/controller"
@@ -14,17 +16,11 @@ func TestBusOnWakeOnceUntilDrain(t *testing.T) {
 	b.Publish(controller.JobProgressMsg{Progress: job.Progress{JobID: "j", ToolUseID: "t1", Status: "in-progress"}})
 	b.Publish(controller.JobProgressMsg{Progress: job.Progress{JobID: "j", ToolUseID: "t1", Status: "done"}})
 	b.Publish(controller.JobProgressMsg{Progress: job.Progress{JobID: "j", ToolUseID: "t2", Status: "done"}})
-	if wakes != 1 {
-		t.Fatalf("wakes=%d want 1 before Drain", wakes)
-	}
+	require.Equal(t, 1, wakes, "wakes before Drain")
 	batch := b.Drain()
-	if len(batch) != 2 {
-		t.Fatalf("len=%d want 2", len(batch))
-	}
+	require.Len(t, batch, 2)
 	b.Publish(controller.JobProgressMsg{Progress: job.Progress{JobID: "j", ToolUseID: "t3", Status: "done"}})
-	if wakes != 2 {
-		t.Fatalf("wakes=%d want 2 after re-arm", wakes)
-	}
+	require.Equal(t, 2, wakes, "wakes after re-arm")
 }
 
 func TestBusCoalesceNonAdjacentAssistant(t *testing.T) {
@@ -37,18 +33,12 @@ func TestBusCoalesceNonAdjacentAssistant(t *testing.T) {
 	b.Publish(controller.SessionEventMsg{Event: session.AssistantMessageUpdate{Message: session.Message{
 		ID: "a1", Text: "two", State: session.StateStreaming,
 	}}})
-	if wakes != 1 {
-		t.Fatalf("wakes=%d want 1", wakes)
-	}
+	require.Equal(t, 1, wakes)
 	batch := b.Drain()
-	if len(batch) != 2 {
-		t.Fatalf("len=%d want 2 (assistant coalesced across progress)", len(batch))
-	}
+	require.Len(t, batch, 2, "assistant coalesced across progress")
 	te := batch[0].(controller.SessionEventMsg)
 	upd := te.Event.(session.AssistantMessageUpdate)
-	if upd.Message.Text != "two" {
-		t.Fatalf("text=%q want two", upd.Message.Text)
-	}
+	require.Equal(t, "two", upd.Message.Text)
 }
 
 func TestBusCoalesceJobProgressAcrossSession(t *testing.T) {
@@ -59,11 +49,7 @@ func TestBusCoalesceJobProgressAcrossSession(t *testing.T) {
 	}}})
 	b.Publish(controller.JobProgressMsg{Progress: job.Progress{JobID: "j", ToolUseID: "t1", Status: "done"}})
 	batch := b.Drain()
-	if len(batch) != 2 {
-		t.Fatalf("len=%d want 2", len(batch))
-	}
+	require.Len(t, batch, 2)
 	jp := batch[0].(controller.JobProgressMsg)
-	if jp.Progress.Status != "done" {
-		t.Fatalf("status=%q", jp.Progress.Status)
-	}
+	require.Equal(t, "done", jp.Progress.Status)
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/pulseaiclub/xui"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pulseaiclub/phi/internal/components"
 	"github.com/pulseaiclub/phi/internal/session"
@@ -159,9 +160,8 @@ func TestAssistantBlockDraw(t *testing.T) {
 			}
 
 			for _, cc := range tt.wantCells {
-				if cc.y >= surface.Size.Height || cc.x >= surface.Size.Width {
-					t.Fatalf("cell (%d,%d) outside surface %dx%d", cc.x, cc.y, surface.Size.Width, surface.Size.Height)
-				}
+				require.True(t, cc.y < surface.Size.Height && cc.x < surface.Size.Width,
+					"cell (%d,%d) outside surface %dx%d", cc.x, cc.y, surface.Size.Width, surface.Size.Height)
 				got := surface.Buffer[cc.y*surface.Size.Width+cc.x]
 				assert.True(
 					t,

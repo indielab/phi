@@ -3,8 +3,9 @@ package prompt
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoadContextFileFromDirPrefersAGENTS(t *testing.T) {
@@ -13,12 +14,8 @@ func TestLoadContextFileFromDirPrefersAGENTS(t *testing.T) {
 	mustWrite(t, filepath.Join(dir, "AGENTS.md"), "agents rules")
 
 	got := loadContextFileFromDir(dir)
-	if got == nil {
-		t.Fatal("expected a context file")
-	}
-	if got.Content != "agents rules" {
-		t.Fatalf("prefer AGENTS.md, got %q", got.Content)
-	}
+	require.NotNil(t, got, "expected a context file")
+	require.Equal(t, "agents rules", got.Content, "prefer AGENTS.md")
 }
 
 func TestLoadContextFileFromDirFallsBackToCLAUDE(t *testing.T) {
@@ -26,9 +23,8 @@ func TestLoadContextFileFromDirFallsBackToCLAUDE(t *testing.T) {
 	mustWrite(t, filepath.Join(dir, "CLAUDE.md"), "claude only")
 
 	got := loadContextFileFromDir(dir)
-	if got == nil || got.Content != "claude only" {
-		t.Fatalf("got %+v", got)
-	}
+	require.NotNil(t, got)
+	require.Equal(t, "claude only", got.Content)
 }
 
 func TestLoadProjectContextFilesOrder(t *testing.T) {
@@ -44,14 +40,10 @@ func TestLoadProjectContextFilesOrder(t *testing.T) {
 	mustWrite(t, filepath.Join(cwd, "CLAUDE.md"), "cwd")
 
 	files := loadProjectContextFiles(cwd, agentDir)
-	if len(files) != 3 {
-		t.Fatalf("expected 3 files, got %d: %+v", len(files), files)
-	}
+	require.Len(t, files, 3)
 	want := []string{"global", "mid", "cwd"}
 	for i, w := range want {
-		if files[i].Content != w {
-			t.Fatalf("files[%d]=%q want %q", i, files[i].Content, w)
-		}
+		require.Equal(t, w, files[i].Content, "files[%d]", i)
 	}
 }
 
@@ -60,27 +52,17 @@ func TestLoadProjectContextFilesDedupesAgentDir(t *testing.T) {
 	mustWrite(t, filepath.Join(dir, "AGENTS.md"), "once")
 
 	files := loadProjectContextFiles(dir, dir)
-	if len(files) != 1 {
-		t.Fatalf("expected 1 file, got %d", len(files))
-	}
+	require.Len(t, files, 1)
 }
 
 func TestFormatProjectContext(t *testing.T) {
 	got := formatProjectContext([]ContextFile{
 		{Path: "/tmp/AGENTS.md", Content: "use gofmt"},
 	})
-	if !strings.Contains(got, "<project_context>") {
-		t.Fatalf("missing wrapper: %q", got)
-	}
-	if !strings.Contains(got, `<project_instructions path="/tmp/AGENTS.md">`) {
-		t.Fatalf("missing path attr: %q", got)
-	}
-	if !strings.Contains(got, "use gofmt") {
-		t.Fatalf("missing body: %q", got)
-	}
-	if formatProjectContext(nil) != "" {
-		t.Fatal("empty files should yield empty string")
-	}
+	require.Contains(t, got, "<project_context>")
+	require.Contains(t, got, `<project_instructions path="/tmp/AGENTS.md">`)
+	require.Contains(t, got, "use gofmt")
+	require.Empty(t, formatProjectContext(nil), "empty files should yield empty string")
 }
 
 func TestBuildIncludesContext(t *testing.T) {
@@ -88,21 +70,15 @@ func TestBuildIncludesContext(t *testing.T) {
 	mustWrite(t, filepath.Join(dir, "AGENTS.md"), "always use tabs")
 
 	ctx := formatProjectContext(loadProjectContextFiles(dir, t.TempDir()))
-	if !strings.Contains(ctx, "always use tabs") {
-		t.Fatalf("expected cwd AGENTS.md in context, got %q", ctx)
-	}
+	require.Contains(t, ctx, "always use tabs")
 }
 
 func mustWrite(t *testing.T, path, content string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
 
 func mustMkdir(t *testing.T, path string) {
 	t.Helper()
-	if err := os.MkdirAll(path, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.MkdirAll(path, 0o755))
 }

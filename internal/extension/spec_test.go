@@ -157,7 +157,7 @@ func TestInstallFromReleaseArchive(t *testing.T) {
 			return os.WriteFile(dest, []byte(body), 0o644)
 		},
 		RunGit: func(context.Context, string, ...string) error {
-			t.Fatal("git should not run when release succeeds")
+			require.Fail(t, "git should not run when release succeeds")
 			return nil
 		},
 	})
@@ -199,11 +199,11 @@ func TestInstallRejectsExisting(t *testing.T) {
 		Spec: extension.Spec{Owner: "alice", Repo: "greet"},
 		Git:  "git",
 		FetchRelease: func(context.Context, string, string) (githubrelease.Release, error) {
-			t.Fatal("release should not be queried when dest exists")
+			require.Fail(t, "release should not be queried when dest exists")
 			return githubrelease.Release{}, nil
 		},
 		RunGit: func(context.Context, string, ...string) error {
-			t.Fatal("git should not run")
+			require.Fail(t, "git should not run")
 			return nil
 		},
 	})

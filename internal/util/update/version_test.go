@@ -3,6 +3,8 @@ package update_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/phi/internal/util/update"
 )
 
@@ -19,16 +21,14 @@ func TestVersionLess(t *testing.T) {
 	}
 	for _, tc := range cases {
 		if got := update.VersionLess(tc.a, tc.b); got != tc.want {
-			t.Fatalf("VersionLess(%q, %q)=%v want %v", tc.a, tc.b, got, tc.want)
+			require.Equal(t, tc.want, got, "VersionLess(%q, %q)", tc.a, tc.b)
 		}
 	}
 }
 
 func TestIsDevBuild(t *testing.T) {
-	if !update.IsDevBuild("dev") || !update.IsDevBuild("") || !update.IsDevBuild("v0.0.0") {
-		t.Fatal("expected dev builds")
-	}
-	if update.IsDevBuild("v0.1.0") {
-		t.Fatal("v0.1.0 should not be dev")
-	}
+	require.True(t, update.IsDevBuild("dev"), "expected dev build: dev")
+	require.True(t, update.IsDevBuild(""), "expected dev build: empty")
+	require.True(t, update.IsDevBuild("v0.0.0"), "expected dev build: v0.0.0")
+	require.False(t, update.IsDevBuild("v0.1.0"), "v0.1.0 should not be dev")
 }

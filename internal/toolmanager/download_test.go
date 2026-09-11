@@ -1,8 +1,9 @@
 package toolmanager
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/pulseaiclub/phi/internal/util/githubrelease"
 )
@@ -15,12 +16,8 @@ func TestFindReleaseAssetUsesCandidateOrder(t *testing.T) {
 	}
 
 	got, ok := findReleaseAsset(assets, []string{"tool-musl.tar.gz", "tool-gnu.tar.gz"})
-	if !ok {
-		t.Fatal("findReleaseAsset() did not find a compatible asset")
-	}
-	if got.Name != "tool-musl.tar.gz" {
-		t.Fatalf("findReleaseAsset() = %q, want musl candidate", got.Name)
-	}
+	require.True(t, ok, "findReleaseAsset() did not find a compatible asset")
+	require.Equal(t, "tool-musl.tar.gz", got.Name, "findReleaseAsset() = %q, want musl candidate")
 }
 
 func TestFindReleaseAssetFallsBack(t *testing.T) {
@@ -30,12 +27,8 @@ func TestFindReleaseAssetFallsBack(t *testing.T) {
 	}
 
 	got, ok := findReleaseAsset(assets, []string{"tool-musl.tar.gz", "tool-gnu.tar.gz"})
-	if !ok {
-		t.Fatal("findReleaseAsset() did not use the fallback asset")
-	}
-	if got.Name != "tool-gnu.tar.gz" {
-		t.Fatalf("findReleaseAsset() = %q, want GNU fallback", got.Name)
-	}
+	require.True(t, ok, "findReleaseAsset() did not use the fallback asset")
+	require.Equal(t, "tool-gnu.tar.gz", got.Name, "findReleaseAsset() = %q, want GNU fallback")
 }
 
 func TestSelectCompatibleAssetFallsBackToOlderRelease(t *testing.T) {
@@ -67,12 +60,13 @@ func TestSelectCompatibleAssetFallsBackToOlderRelease(t *testing.T) {
 		PlatformDarwin,
 		ArchAMD64,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if asset.Name != "fd-v10.3.0-x86_64-apple-darwin.tar.gz" {
-		t.Fatalf("selectCompatibleAsset() = %q, want v10.3.0 Intel macOS asset", asset.Name)
-	}
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		"fd-v10.3.0-x86_64-apple-darwin.tar.gz",
+		asset.Name,
+		"selectCompatibleAsset() = %q, want v10.3.0 Intel macOS asset",
+	)
 }
 
 func TestSelectCompatibleAssetNoMatch(t *testing.T) {
@@ -87,13 +81,9 @@ func TestSelectCompatibleAssetNoMatch(t *testing.T) {
 		PlatformDarwin,
 		ArchAMD64,
 	)
-	if err == nil {
-		t.Fatal("selectCompatibleAsset() unexpectedly found an asset")
-	}
+	require.Error(t, err, "selectCompatibleAsset() unexpectedly found an asset")
 	for _, want := range []string{"fd has no compatible release asset", "darwin/amd64", "v10.4.2, v10.4.1"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("selectCompatibleAsset() error = %q, want substring %q", err, want)
-		}
+		require.Contains(t, err.Error(), want, "selectCompatibleAsset() error = %q, want substring %q", err, want)
 	}
 }
 
@@ -113,7 +103,6 @@ func TestSelectCompatibleAssetRequiresDownloadURL(t *testing.T) {
 		PlatformLinux,
 		ArchAMD64,
 	)
-	if err == nil || !strings.Contains(err.Error(), "has no download URL") {
-		t.Fatalf("selectCompatibleAsset() error = %v, want missing URL error", err)
-	}
+	require.Error(t, err, "selectCompatibleAsset() error = %v, want missing URL error")
+	require.Contains(t, err.Error(), "has no download URL")
 }

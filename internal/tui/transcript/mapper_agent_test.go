@@ -1,8 +1,10 @@
 package transcript_test
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/pulseaiclub/phi/internal/components"
 	"github.com/pulseaiclub/phi/internal/components/block"
@@ -57,30 +59,19 @@ func TestMapperAgentBlockSummaryAndChildren(t *testing.T) {
 	}
 
 	entries, ids, dirty := m.Sync(nil, nil, snap)
-	if len(entries) != 1 || len(ids) != 1 {
-		t.Fatalf("entries=%d ids=%d", len(entries), len(ids))
-	}
-	if len(dirty) != 1 || dirty[0] != 0 {
-		t.Fatalf("dirty=%v want [0]", dirty)
-	}
+	require.Len(t, entries, 1)
+	require.Len(t, ids, 1)
+	require.Equal(t, []int{0}, dirty)
 	ab, ok := entries[0].(*block.AgentBlock)
-	if !ok {
-		t.Fatalf("got %T", entries[0])
-	}
-	if ab.Summary == "" || !strings.Contains(ab.Summary, "Findings") {
-		t.Fatalf("summary %q", ab.Summary)
-	}
-	if len(ab.Children) != 1 || ab.Children[0].Name != "read" {
-		t.Fatalf("children %+v", ab.Children)
-	}
-	if ab.Status != status.ToolDone {
-		t.Fatalf("status %v", ab.Status)
-	}
+	require.True(t, ok, "expected *block.AgentBlock, got %T", entries[0])
+	assert.NotEmpty(t, ab.Summary)
+	assert.Contains(t, ab.Summary, "Findings")
+	require.Len(t, ab.Children, 1)
+	require.Equal(t, "read", ab.Children[0].Name)
+	require.Equal(t, status.ToolDone, ab.Status)
 	surf := ab.Draw(components.DrawContext{Max: components.Size{Width: 80, Height: 40}})
 	txt := components.SurfaceText(surf)
-	if strings.Contains(txt, `"job_id"`) {
-		t.Fatalf("raw json leaked: %q", txt)
-	}
+	assert.NotContains(t, txt, `"job_id"`, "raw json leaked")
 }
 
 func TestMapperAgentWaitSummaryOnly(t *testing.T) {
@@ -125,12 +116,8 @@ func TestMapperAgentWaitSummaryOnly(t *testing.T) {
 
 	entries, _, _ := m.Sync(nil, nil, snap)
 	ab, ok := entries[0].(*block.AgentBlock)
-	if !ok {
-		t.Fatalf("got %T", entries[0])
-	}
-	if len(ab.Children) != 0 {
-		t.Fatalf("wait must not show spawn children: %+v", ab.Children)
-	}
+	require.True(t, ok, "expected *block.AgentBlock, got %T", entries[0])
+	require.Empty(t, ab.Children, "wait must not show spawn children")
 
 	// Done wait: markdown summary only.
 	snap.Tools["call_wait"] = session.ToolRun{
@@ -145,20 +132,10 @@ func TestMapperAgentWaitSummaryOnly(t *testing.T) {
 }`,
 	}
 	entries, _, dirty := m.Sync(entries, []string{"call_wait"}, snap)
-	if len(dirty) != 1 || dirty[0] != 0 {
-		t.Fatalf("dirty=%v want [0] after summary change", dirty)
-	}
+	require.Equal(t, []int{0}, dirty, "dirty after summary change")
 	ab, ok = entries[0].(*block.AgentBlock)
-	if !ok {
-		t.Fatalf("got %T", entries[0])
-	}
-	if len(ab.Children) != 0 {
-		t.Fatalf("wait children still set: %+v", ab.Children)
-	}
-	if !strings.Contains(ab.Summary, "Done") {
-		t.Fatalf("summary %q", ab.Summary)
-	}
-	if !ab.Expanded {
-		t.Fatal("expected expand when summary present")
-	}
+	require.True(t, ok, "expected *block.AgentBlock, got %T", entries[0])
+	require.Empty(t, ab.Children, "wait children still set")
+	assert.Contains(t, ab.Summary, "Done")
+	require.True(t, ab.Expanded, "expected expand when summary present")
 }

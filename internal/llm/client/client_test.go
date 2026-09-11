@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/phi/internal/llm"
 )
 
@@ -21,9 +23,7 @@ func TestIsAnthropicProvider(t *testing.T) {
 		{llm.ModelConfig{Name: "deepseek-chat", BaseURL: "https://api.deepseek.com/v1"}, false},
 	}
 	for i, c := range cases {
-		if got := isAnthropicProvider(c.cfg); got != c.want {
-			t.Fatalf("case %d: isAnthropicProvider(%+v) = %v, want %v", i, c.cfg, got, c.want)
-		}
+		require.Equal(t, c.want, isAnthropicProvider(c.cfg), "case %d: isAnthropicProvider(%+v)", i, c.cfg)
 	}
 }
 
@@ -54,21 +54,13 @@ func TestClientStreamAnthropicEndToEnd(t *testing.T) {
 	)
 	events := collectEvents(client.Stream(t.Context(), []llm.Message{{Role: llm.RoleUser, Content: "hello"}}))
 
-	if gotPath != "/v1/messages" {
-		t.Fatalf("expected POST /v1/messages, got %q", gotPath)
-	}
-	if gotKey != "sk-test" {
-		t.Fatalf("expected X-Api-Key sk-test, got %q", gotKey)
-	}
-	if gotVersion == "" {
-		t.Fatal("expected Anthropic-Version header")
-	}
+	require.Equal(t, "/v1/messages", gotPath)
+	require.Equal(t, "sk-test", gotKey)
+	require.NotEmpty(t, gotVersion, "expected Anthropic-Version header")
 	var text strings.Builder
 	var done *llm.StreamEvent
 	for _, ev := range events {
-		if ev.Err != "" {
-			t.Fatalf("stream error: %v", ev.Err)
-		}
+		require.Empty(t, ev.Err, "stream error")
 		switch ev.Type {
 		case llm.StreamEventTypeDelta:
 			text.WriteString(ev.Delta.Content)
@@ -76,12 +68,10 @@ func TestClientStreamAnthropicEndToEnd(t *testing.T) {
 			done = &ev
 		}
 	}
-	if text.String() != "hi" || done == nil || done.Partial.Choices[0].Message.Content != "hi" {
-		t.Fatalf("unexpected stream result: text=%q done=%v", text.String(), done)
-	}
-	if done.Partial.Usage.TotalTokens != 5 {
-		t.Fatalf("unexpected total tokens: %+v", done.Partial.Usage)
-	}
+	require.Equal(t, "hi", text.String())
+	require.NotNil(t, done, "unexpected stream result")
+	require.Equal(t, "hi", done.Partial.Choices[0].Message.Content)
+	require.Equal(t, 5, done.Partial.Usage.TotalTokens)
 }
 
 func TestClientStreamOpenAIEndToEnd(t *testing.T) {
@@ -105,15 +95,11 @@ func TestClientStreamOpenAIEndToEnd(t *testing.T) {
 	client := NewClient(llm.ModelConfig{Name: "gpt-4o", BaseURL: srv.URL, APIKey: "sk-test"}, nil, "")
 	events := collectEvents(client.Stream(t.Context(), []llm.Message{{Role: llm.RoleUser, Content: "hello"}}))
 
-	if gotPath != "/chat/completions" {
-		t.Fatalf("expected POST /chat/completions, got %q", gotPath)
-	}
+	require.Equal(t, "/chat/completions", gotPath)
 	var text strings.Builder
 	var done *llm.StreamEvent
 	for _, ev := range events {
-		if ev.Err != "" {
-			t.Fatalf("stream error: %v", ev.Err)
-		}
+		require.Empty(t, ev.Err, "stream error")
 		switch ev.Type {
 		case llm.StreamEventTypeDelta:
 			text.WriteString(ev.Delta.Content)
@@ -121,12 +107,10 @@ func TestClientStreamOpenAIEndToEnd(t *testing.T) {
 			done = &ev
 		}
 	}
-	if text.String() != "hello" || done == nil || done.Partial.Choices[0].Message.Content != "hello" {
-		t.Fatalf("unexpected stream result: text=%q done=%v", text.String(), done)
-	}
-	if done.Partial.Usage.TotalTokens != 6 {
-		t.Fatalf("unexpected total tokens: %+v", done.Partial.Usage)
-	}
+	require.Equal(t, "hello", text.String())
+	require.NotNil(t, done, "unexpected stream result")
+	require.Equal(t, "hello", done.Partial.Choices[0].Message.Content)
+	require.Equal(t, 6, done.Partial.Usage.TotalTokens)
 }
 
 func TestClientCompactAnthropic(t *testing.T) {
@@ -140,15 +124,9 @@ func TestClientCompactAnthropic(t *testing.T) {
 
 	client := NewClient(llm.ModelConfig{Name: "claude-sonnet-4-20250514", BaseURL: srv.URL, APIKey: "sk-test"}, nil, "")
 	out, err := client.Compact(t.Context(), "summarize")
-	if err != nil {
-		t.Fatalf("compact: %v", err)
-	}
-	if gotPath != "/v1/messages" {
-		t.Fatalf("expected POST /v1/messages, got %q", gotPath)
-	}
-	if out != "summary here" {
-		t.Fatalf("expected 'summary here', got %q", out)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "/v1/messages", gotPath)
+	require.Equal(t, "summary here", out)
 }
 
 func TestClientCompactOpenAI(t *testing.T) {
@@ -162,15 +140,9 @@ func TestClientCompactOpenAI(t *testing.T) {
 
 	client := NewClient(llm.ModelConfig{Name: "gpt-4o", BaseURL: srv.URL, APIKey: "sk-test"}, nil, "")
 	out, err := client.Compact(t.Context(), "summarize")
-	if err != nil {
-		t.Fatalf("compact: %v", err)
-	}
-	if gotPath != "/chat/completions" {
-		t.Fatalf("expected POST /chat/completions, got %q", gotPath)
-	}
-	if out != "summary here" {
-		t.Fatalf("expected 'summary here', got %q", out)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "/chat/completions", gotPath)
+	require.Equal(t, "summary here", out)
 }
 
 // collectEvents drains an iter.Seq2 into a slice.

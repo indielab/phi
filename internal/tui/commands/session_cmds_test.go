@@ -45,7 +45,7 @@ func TestSessionCommands_ShowEmptyToasts(t *testing.T) {
 		Bus:        bus,
 		SessionDir: func() string { return t.TempDir() },
 		OpenPicker: func([]session.SessionMeta, string) {
-			t.Fatal("picker should not open")
+			require.Fail(t, "picker should not open")
 		},
 	}
 	s.Show()

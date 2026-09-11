@@ -3,6 +3,8 @@ package controller
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/phi/internal/job"
 )
 
@@ -15,16 +17,10 @@ func TestShouldPublishJobProgressDedup(t *testing.T) {
 		Status:    "in-progress",
 		Detail:    "a.go",
 	}
-	if !c.shouldPublishJobProgress(p) {
-		t.Fatal("first should publish")
-	}
-	if c.shouldPublishJobProgress(p) {
-		t.Fatal("duplicate should drop")
-	}
+	require.True(t, c.shouldPublishJobProgress(p), "first should publish")
+	require.False(t, c.shouldPublishJobProgress(p), "duplicate should drop")
 	p.Status = "done"
-	if !c.shouldPublishJobProgress(p) {
-		t.Fatal("status change should publish")
-	}
+	require.True(t, c.shouldPublishJobProgress(p), "status change should publish")
 	p2 := job.Progress{
 		JobID:     "j",
 		ToolUseID: "t2",
@@ -32,7 +28,5 @@ func TestShouldPublishJobProgressDedup(t *testing.T) {
 		Status:    "done",
 		Detail:    "ls",
 	}
-	if !c.shouldPublishJobProgress(p2) {
-		t.Fatal("new child should publish")
-	}
+	require.True(t, c.shouldPublishJobProgress(p2), "new child should publish")
 }

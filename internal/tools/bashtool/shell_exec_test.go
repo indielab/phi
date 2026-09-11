@@ -6,32 +6,23 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestExecShellEcho(t *testing.T) {
 	res, err := ExecShell(t.Context(), "echo hello", ShellExecOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Canceled || res.ExitCode != 0 {
-		t.Fatalf("result: %+v", res)
-	}
-	if !strings.Contains(res.Output, "hello") {
-		t.Fatalf("output=%q", res.Output)
-	}
+	require.NoError(t, err)
+	require.False(t, res.Canceled || res.ExitCode != 0, "result: %+v", res)
+	require.Contains(t, res.Output, "hello")
 }
 
 func TestExecShellCapturesBothStreams(t *testing.T) {
 	res, err := ExecShell(t.Context(), "printf stdout; printf stderr >&2", ShellExecOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.ExitCode != 0 || res.Canceled {
-		t.Fatalf("result: %+v", res)
-	}
-	if !strings.Contains(res.Output, "stdout") || !strings.Contains(res.Output, "stderr") {
-		t.Fatalf("combined output=%q", res.Output)
-	}
+	require.NoError(t, err)
+	require.False(t, res.ExitCode != 0 || res.Canceled, "result: %+v", res)
+	require.Contains(t, res.Output, "stdout")
+	require.Contains(t, res.Output, "stderr")
 }
 
 func TestShellOutputWriterStreamsAfterCollectionCap(t *testing.T) {
@@ -40,18 +31,13 @@ func TestShellOutputWriterStreamsAfterCollectionCap(t *testing.T) {
 		cb:      newCappedBuffer(4),
 		onChunk: func(chunk string) { streamed.WriteString(chunk) },
 	}
-	if _, err := output.Write([]byte("1234")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := output.Write([]byte("5678")); err != nil {
-		t.Fatal(err)
-	}
-	if got := streamed.String(); got != "12345678" {
-		t.Fatalf("streamed output=%q, want all chunks", got)
-	}
-	if got := output.cb.String(); got != "5678" || !output.cb.Truncated() {
-		t.Fatalf("collected output=%q truncated=%v, want bounded tail", got, output.cb.Truncated())
-	}
+	_, err := output.Write([]byte("1234"))
+	require.NoError(t, err)
+	_, err = output.Write([]byte("5678"))
+	require.NoError(t, err)
+	require.Equal(t, "12345678", streamed.String(), "streamed output should contain all chunks")
+	require.Equal(t, "5678", output.cb.String(), "collected output should be bounded tail")
+	require.True(t, output.cb.Truncated(), "expected truncation")
 }
 
 func TestExecShellCapturesOutputBeforeProcessExit(t *testing.T) {
@@ -60,15 +46,10 @@ func TestExecShellCapturesOutputBeforeProcessExit(t *testing.T) {
 
 	for range 8 {
 		res, err := ExecShell(t.Context(), command, ShellExecOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if res.ExitCode != 0 || res.Canceled {
-			t.Fatalf("result: %+v", res)
-		}
-		if len(res.Output) != outputSize || strings.Trim(res.Output, "x") != "" {
-			t.Fatalf("captured %d bytes, want %d x bytes", len(res.Output), outputSize)
-		}
+		require.NoError(t, err)
+		require.False(t, res.ExitCode != 0 || res.Canceled, "result: %+v", res)
+		require.Len(t, res.Output, outputSize)
+		require.Empty(t, strings.Trim(res.Output, "x"), "expected all x bytes")
 	}
 }
 
@@ -77,23 +58,14 @@ func TestExecShellKeepsOutputTail(t *testing.T) {
 	// must not be dropped (writer-mode copying drains to EOF before Run returns).
 	command := "seq 1 100000" // ~590KB, under the collection cap
 	res, err := ExecShell(t.Context(), command, ShellExecOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	cleanupBashOutputFile(t, res.Output)
-	if res.ExitCode != 0 || res.Canceled {
-		t.Fatalf("result: %+v", res)
-	}
+	require.False(t, res.ExitCode != 0 || res.Canceled, "result: %+v", res)
 	// The display notice's own line range proves line 100000 was collected.
-	if !strings.Contains(res.Output, "Showing lines 99001-100000 of 100000") {
-		t.Fatalf("output tail lost, ends with %q", tailLines(res.Output))
-	}
-	if !strings.Contains(res.Output, "Full output:") || strings.Contains(res.Output, "Retained output:") {
-		t.Fatalf("under-cap output mislabeled, ends with %q", tailLines(res.Output))
-	}
-	if strings.Contains(res.Output, "[output truncated:") {
-		t.Fatalf("unexpected collection truncation, ends with %q", tailLines(res.Output))
-	}
+	require.Contains(t, res.Output, "Showing lines 99001-100000 of 100000", "output tail lost")
+	require.Contains(t, res.Output, "Full output:")
+	require.NotContains(t, res.Output, "Retained output:", "under-cap output mislabeled")
+	require.NotContains(t, res.Output, "[output truncated:", "unexpected collection truncation")
 }
 
 func TestExecShellBoundsCollection(t *testing.T) {
@@ -101,19 +73,12 @@ func TestExecShellBoundsCollection(t *testing.T) {
 	// BashMaxCollectBytes are kept and the collection truncation is reported.
 	command := "yes x | head -c 20971520" // 20MB
 	res, err := ExecShell(t.Context(), command, ShellExecOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	cleanupBashOutputFile(t, res.Output)
-	if res.ExitCode != 0 || res.Canceled {
-		t.Fatalf("result: %+v", res)
-	}
-	if !strings.Contains(res.Output, "[output truncated: only the last 8 MB was kept]") {
-		t.Fatalf("want collection truncation notice, ends with %q", tailLines(res.Output))
-	}
-	if !strings.Contains(res.Output, "Retained output:") || strings.Contains(res.Output, "Full output:") {
-		t.Fatalf("collection-truncated output mislabeled, ends with %q", tailLines(res.Output))
-	}
+	require.False(t, res.ExitCode != 0 || res.Canceled, "result: %+v", res)
+	require.Contains(t, res.Output, "[output truncated: only the last 8 MB was kept]")
+	require.Contains(t, res.Output, "Retained output:")
+	require.NotContains(t, res.Output, "Full output:", "collection-truncated output mislabeled")
 }
 
 func cleanupBashOutputFile(t *testing.T, output string) {
@@ -132,14 +97,6 @@ func cleanupBashOutputFile(t *testing.T, output string) {
 	}
 }
 
-func tailLines(s string) string {
-	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
-	if len(lines) > 3 {
-		lines = lines[len(lines)-3:]
-	}
-	return strings.Join(lines, "\n")
-}
-
 func TestExecShellCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	go func() {
@@ -147,20 +104,12 @@ func TestExecShellCancel(t *testing.T) {
 		cancel()
 	}()
 	res, err := ExecShell(ctx, "sleep 5", ShellExecOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !res.Canceled {
-		t.Fatalf("want canceled, got %+v", res)
-	}
+	require.NoError(t, err)
+	require.True(t, res.Canceled, "want canceled, got %+v", res)
 }
 
 func TestExecShellExitCode(t *testing.T) {
 	res, err := ExecShell(t.Context(), "exit 7", ShellExecOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.ExitCode != 7 {
-		t.Fatalf("exit=%d", res.ExitCode)
-	}
+	require.NoError(t, err)
+	require.Equal(t, 7, res.ExitCode)
 }

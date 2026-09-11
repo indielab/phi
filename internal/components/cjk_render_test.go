@@ -4,15 +4,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/pulseaiclub/xui"
 )
 
 func TestCJKTrailNotPaintedColumnByColumn(t *testing.T) {
 	s := NewSurface(10, 1, nil)
 	s.Print(0, 0, "笔记", xui.Style{}, xui.WidthUnicode)
-	if !s.Buffer[1].Trail {
-		t.Fatalf("expected trail at col 1, got %+v", s.Buffer[1])
-	}
+	require.True(t, s.Buffer[1].Trail, "expected trail at col 1, got %+v", s.Buffer[1])
 	screen := xui.NewScreen(10, 1)
 	win := xui.NewWindow(screen)
 	win.Clear()
@@ -23,19 +23,15 @@ func TestCJKTrailNotPaintedColumnByColumn(t *testing.T) {
 			win.SetCell(x, 0, c)
 		}
 	}
-	if got := screen.GetCell(0, 0); got.Char != "笔" || got.Width != 2 {
-		t.Fatalf("primary = %+v", got)
-	}
-	if got := screen.GetCell(1, 0); !got.Trail {
-		t.Fatalf("screen trail = %+v", got)
-	}
+	got0 := screen.GetCell(0, 0)
+	require.Equal(t, "笔", got0.Char, "primary")
+	require.Equal(t, uint8(2), got0.Width, "primary width")
+	got1 := screen.GetCell(1, 0)
+	require.True(t, got1.Trail, "screen trail = %+v", got1)
 	r := xui.NewRenderer()
 	screen.MarkRefresh()
 	var buf strings.Builder
-	if _, err := r.RenderDiff(&buf, screen.Diff(), -1, -1, false, 0); err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(buf.String(), "笔\x1b[1;2H") {
-		t.Fatal("ANSI writes into trail column after 笔")
-	}
+	_, err := r.RenderDiff(&buf, screen.Diff(), -1, -1, false, 0)
+	require.NoError(t, err)
+	require.NotContains(t, buf.String(), "笔\x1b[1;2H", "ANSI writes into trail column after 笔")
 }
