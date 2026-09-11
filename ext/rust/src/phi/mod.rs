@@ -541,15 +541,9 @@ fn serve(state: &mut ServeState<'_>) -> Result<(), Error> {
                 return Ok(());
             }
             pxb::FrameType::CommandInvoked => serve_command(state, &f)?,
-            pxb::FrameType::ToolInvoke => {
-                serve_tool(state.wr, &f, &mut state.tools, state.rt)?
-            }
-            pxb::FrameType::ToolDetailInvoke => {
-                serve_tool_detail(state.wr, &f, &mut state.tools)?
-            }
-            pxb::FrameType::Intercept => {
-                serve_intercept(state.wr, &f, &mut state.handlers)?
-            }
+            pxb::FrameType::ToolInvoke => serve_tool(state.wr, &f, &mut state.tools, state.rt)?,
+            pxb::FrameType::ToolDetailInvoke => serve_tool_detail(state.wr, &f, &mut state.tools)?,
+            pxb::FrameType::Intercept => serve_intercept(state.wr, &f, &mut state.handlers)?,
             pxb::FrameType::Event => {
                 if let Ok(ev) = pxb::decode_event_notify(&f.body) {
                     dispatch_event(&mut state.handlers.events, ev);
