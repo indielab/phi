@@ -10,6 +10,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- Built-in DeepSeek model presets: config entries named `deepseek-flash`
+  or `deepseek-v4-pro` auto-fill base_url / context_window /
+  image_enabled from the catalog, so only name + api_key is required.
+
 ### Changed
 
 ### Deprecated
