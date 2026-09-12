@@ -237,7 +237,7 @@ syntax highlighting. Structural markers (`#`, `` ` ``, `*`) are stripped.
 The editor supports:
 
 - `@` — fuzzy file mention picker (type `@` and start typing a path)
-- `/` — slash command picker (`/sessions`, `/resume`, `/clear`, `/diff`)
+- `/` — slash command picker (`/sessions`, `/clear`, `/diff`)
 - `?` — shortcut help picker (lists `/`, `!`, `@`, and key bindings; `Esc` closes)
 - `!command` — run a shell command locally and stream its output into the
   transcript (see [Commands](#commands))
@@ -269,8 +269,7 @@ line notes, then hand them to the agent without leaving the terminal.
 | `/diff staged` | Staged changes |
 | `/diff HEAD` | Last commit (`git show`) |
 
-Slash-picker Enter inserts `/diff` plus a trailing space into the composer
-(same pattern as `/resume`); submit to open. Inside the overlay: `j`/`k` move,
+Slash-picker Enter inserts `/diff` plus a trailing space into the composer; submit to open. Inside the overlay:
 `s` side-by-side, `i` add/edit a note, `x` delete, `a` send notes to the agent,
 `?` help, `q` / `Esc` close. Notes persist under `.phi/review.json`.
 
@@ -284,7 +283,6 @@ Slash-picker Enter inserts `/diff` plus a trailing space into the composer
 | `phi update --check` | Query the latest release without installing |
 | `phi sessions list`| List persisted sessions for this directory    |
 | `/sessions`        | List sessions for this directory (TUI)        |
-| `/resume <id>`     | Resume a session by id or unique prefix (TUI) |
 | `/clear`           | Start a fresh empty session (TUI)             |
 | `/diff`            | Full-screen git review — see [Diff review](#diff-review) |
 | `!command`         | Run a shell command locally, stream output into the transcript; `Esc` cancels it |
@@ -301,7 +299,6 @@ Sessions persist automatically per working directory under
 - `phi sessions list` — list session id, mtime, and preview for the current
   directory
 - `/sessions` in the TUI — same, in-app
-- `/resume <id>` — continue a session (id or unique prefix)
 - `/clear` — start a fresh session (new id, empty transcript)
 - `phi run --session <id>` / `phi run --continue-last` — resume headlessly
 
