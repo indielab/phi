@@ -103,7 +103,7 @@ the summary with a type and, when relevant, a scope:
 Examples from the history:
 
 ```text
-feat(session): persist sessions and add /resume, /sessions slash commands
+feat(session): persist sessions and add /sessions slash commands
 fix(session): restore mutex on chain manager lost during panda migration
 refactor(config): replace internal/config with project workspace
 ```
