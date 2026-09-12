@@ -39,7 +39,7 @@ var presets = []llm.ModelConfig{
 	//   deepseek-flash    cache-hit ¥0.04   cache-miss ¥2.00   output ¥8.00
 	//   deepseek-v4-pro   cache-hit ¥0.30   cache-miss ¥9.00  output ¥27.00
 	{
-		Name:          "deepseek-v4-flash", // DeepSeek-V4.1-Flash
+		Name:          "deepseek-flash", // DeepSeek-V4.1-Flash
 		BaseURL:       "https://api.deepseek.com",
 		ContextWindow: 1_000_000,
 		ImageEnabled:  true, // V4.1-Flash accepts image input.
