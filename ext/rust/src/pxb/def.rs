@@ -8,24 +8,29 @@
 
 macro_rules! pxb_message {
     ($(#[$meta:meta])* pub struct $Name:ident { $($body:tt)* }) => {
-        pxb_message!(@step $Name, [$(#[$meta])*], [], [], [], [ $($body)* ]);
+        pxb_message!(@step $Name, [$(#[$meta])*], [], [], [ $($body)* ]);
     };
 
+    // Field descriptors are space-separated triples: (+|?) tag field
     (@step $Name:ident, [$(#[$meta:meta])*],
-     [$($sf:tt)*], [$($eitem:tt)*], [$($ditem:tt)*], []) => {
+     [$($sf:tt)*], [$($op:tt $ftag:literal $ffield:ident)*], []) => {
         #[derive(Debug, Clone, PartialEq, Eq, Default)]
         $(#[$meta])*
         pub struct $Name { $($sf)* }
         impl $Name {
             pub fn encode(&self) -> Vec<u8> {
                 let mut fw = FieldWriter::new();
-                $( pxb_message!(@enc self, fw, $eitem); )*
+                $( pxb_message!(@enc self, fw, $op, $ftag, $ffield); )*
                 fw.into_vec()
             }
             pub fn decode(b: &[u8]) -> Result<Self, Error> {
                 let mut m = Self::default();
                 walk_fields(b, |tag, kind, fr| {
-                    pxb_message!(@decode m, tag, kind, fr, $($ditem)*);
+                    // macro_rules cannot expand to match arms, so repeat here.
+                    match tag {
+                        $( $ftag => { m.$ffield = WireField::decode_field(kind, fr)?; } )*
+                        _ => fr.skip(kind)?,
+                    }
                     Ok(())
                 })?;
                 Ok(m)
@@ -34,47 +39,31 @@ macro_rules! pxb_message {
     };
 
     (@step $Name:ident, [$(#[$meta:meta])*],
-     [$($sf:tt)*], [$($eitem:tt)*], [$($ditem:tt)*],
+     [$($sf:tt)*], [$($op:tt $ftag:literal $ffield:ident)*],
      [$(#[$attr:meta])* $tag:literal => $field:ident : $ty:ty , $($rest:tt)*]) => {
         pxb_message!(@step $Name, [$(#[$meta])*],
             [$($sf)* $(#[$attr])* pub $field: $ty,],
-            [$($eitem)* {+ $tag $field}],
-            [$($ditem)* {$tag $field}],
+            [$($op $ftag $ffield)* + $tag $field],
             [$($rest)*]
         );
     };
 
     (@step $Name:ident, [$(#[$meta:meta])*],
-     [$($sf:tt)*], [$($eitem:tt)*], [$($ditem:tt)*],
+     [$($sf:tt)*], [$($op:tt $ftag:literal $ffield:ident)*],
      [$(#[$attr:meta])* option $tag:literal => $field:ident : $ty:ty , $($rest:tt)*]) => {
         pxb_message!(@step $Name, [$(#[$meta])*],
             [$($sf)* $(#[$attr])* pub $field: $ty,],
-            [$($eitem)* {? $tag $field}],
-            [$($ditem)* {$tag $field}],
+            [$($op $ftag $ffield)* ? $tag $field],
             [$($rest)*]
         );
     };
 
-    (@enc $self:ident, $fw:ident, {+ $tag:literal $field:ident}) => {
+    (@enc $self:ident, $fw:ident, +, $tag:literal, $field:ident) => {
         WireField::encode_field(&$self.$field, &mut $fw, $tag);
     };
-    (@enc $self:ident, $fw:ident, {? $tag:literal $field:ident}) => {
+    (@enc $self:ident, $fw:ident, ?, $tag:literal, $field:ident) => {
         if !$self.$field.is_opt_zero() {
             WireField::encode_field(&$self.$field, &mut $fw, $tag);
-        }
-    };
-
-    // Base: no fields left → skip
-    (@decode $m:ident, $tag_id:ident, $kind:ident, $fr:ident,) => {
-        $fr.skip($kind)?
-    };
-    // One field → if match, decode; else recurse
-    (@decode $m:ident, $tag_id:ident, $kind:ident, $fr:ident,
-     {$dtag:literal $field:ident} $($rest:tt)*) => {
-        if $tag_id == $dtag {
-            $m.$field = WireField::decode_field($kind, $fr)?;
-        } else {
-            pxb_message!(@decode $m, $tag_id, $kind, $fr, $($rest)*)
         }
     };
 }
