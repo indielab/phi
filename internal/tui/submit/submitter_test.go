@@ -99,9 +99,16 @@ func TestSubmitter_Submit_needsArgsRefillsComposer(t *testing.T) {
 	spin := status.NewSpinner(th.ToolName)
 	tp := transcript.NewTranscriptPane(th, spin, "Phi test")
 	comp := &stubComposer{}
-	sub := newTestSubmitter(t, tp, nil, comp, commands.NewBuiltinRegistry())
-	sub.Submit("/resume")
-	assert.Equal(t, "/resume ", comp.input)
+	reg := commands.NewCommandRegistry()
+	reg.Register(commands.Command{
+		Name:      "plan",
+		Slash:     true,
+		NeedsArgs: true,
+		Run:       func(commands.CommandContext) error { return nil },
+	})
+	sub := newTestSubmitter(t, tp, nil, comp, reg)
+	sub.Submit("/plan")
+	assert.Equal(t, "/plan ", comp.input)
 	assert.Empty(t, tp.Snapshot().Messages)
 }
 
