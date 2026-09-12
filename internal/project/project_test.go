@@ -340,3 +340,43 @@ models:
 	assert.Empty(t, cfg.DefaultModel)
 	assert.Equal(t, "first", cfg.Model().Name)
 }
+
+func TestLoadConfigAppliesDeepSeekPresets(t *testing.T) {
+	p := discoverInTempHome(t)
+	require.NoError(t, os.WriteFile(p.Global().ConfigFile(), []byte(`
+models:
+  - name: deepseek-flash
+    api_key: sk-flash
+  - name: deepseek-v4-pro
+    api_key: sk-pro
+    context_window: 50000
+  - name: custom-model
+    api_key: sk-custom
+    base_url: https://custom.example/v1
+`), 0o644))
+
+	require.NoError(t, p.LoadConfig())
+	cfg := p.Config()
+
+	// deepseek-flash: only name + api_key → preset fills the rest.
+	flash, ok := cfg.FindModel("deepseek-flash")
+	require.True(t, ok)
+	assert.Equal(t, "https://api.deepseek.com", flash.BaseURL)
+	assert.Equal(t, 1_000_000, flash.ContextWindow)
+	assert.True(t, flash.ImageEnabled, "flash supports image input")
+
+	// deepseek-v4-pro: explicit context_window overrides the preset; image
+	// stays off because v4-pro has no image understanding.
+	pro, ok := cfg.FindModel("deepseek-v4-pro")
+	require.True(t, ok)
+	assert.Equal(t, "https://api.deepseek.com", pro.BaseURL)
+	assert.Equal(t, 50_000, pro.ContextWindow, "explicit context_window overrides preset")
+	assert.False(t, pro.ImageEnabled, "v4-pro has no image understanding")
+
+	// Unknown names keep the generic OpenAI fallback and no preset.
+	custom, ok := cfg.FindModel("custom-model")
+	require.True(t, ok)
+	assert.Equal(t, "https://custom.example/v1", custom.BaseURL)
+	assert.Zero(t, custom.ContextWindow)
+	assert.False(t, custom.ImageEnabled)
+}

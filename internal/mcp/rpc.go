@@ -49,9 +49,9 @@ func nextID(counter *atomic.Int64) int64 {
 	return counter.Add(1)
 }
 
-func decodeToolsList(raw json.RawMessage) ([]ToolDef, error) {
+func decodeToolsList(raw json.RawMessage) ([]ToolDefinition, error) {
 	var parsed struct {
-		Tools []ToolDef `json:"tools"`
+		Tools []ToolDefinition `json:"tools"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return nil, fmt.Errorf("decode tools/list: %w", err)

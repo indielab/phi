@@ -10,6 +10,7 @@ import (
 
 	"github.com/pulseaiclub/phi/internal/llm"
 	"github.com/pulseaiclub/phi/internal/permission"
+	"github.com/pulseaiclub/phi/internal/project/model"
 )
 
 // Config is the project-level configuration loaded from ~/.phi/config.yaml.
@@ -111,11 +112,6 @@ func loadConfig(global GlobalLayout) (*Config, error) {
 	if def.APIKey == "" {
 		return nil, fmt.Errorf("missing api_key (set PHI_API_KEY or models[].api_key in %s)", global.ConfigFile())
 	}
-	for i := range cfg.Models {
-		if cfg.Models[i].BaseURL == "" {
-			cfg.Models[i].BaseURL = "https://api.openai.com/v1"
-		}
-	}
 	if cfg.SkillPath == "" {
 		cfg.SkillPath = global.SkillsDir()
 	}
@@ -174,9 +170,27 @@ func parseConfigFile(path string) (*Config, error) {
 }
 
 func modelEntryToConfig(m modelEntry) llm.ModelConfig {
-	cfg := llm.ModelConfig{Name: m.Name, APIKey: m.APIKey, BaseURL: m.BaseURL, ImageEnabled: m.ImageEnabled}
+	cfg := llm.ModelConfig{Name: m.Name, APIKey: m.APIKey, BaseURL: m.BaseURL}
+	// A built-in preset supplies base_url / context_window / image_enabled
+	// when the entry omits them; the explicit fields below still win so
+	// users can override any default.
+	if preset, ok := model.Lookup(m.Name); ok {
+		if cfg.BaseURL == "" {
+			cfg.BaseURL = preset.BaseURL
+		}
+		if preset.ContextWindow > 0 {
+			cfg.ContextWindow = preset.ContextWindow
+		}
+		cfg.ImageEnabled = preset.ImageEnabled
+	}
 	if m.ContextWindow != nil && *m.ContextWindow > 0 {
 		cfg.ContextWindow = *m.ContextWindow
+	}
+	if m.ImageEnabled != nil {
+		cfg.ImageEnabled = *m.ImageEnabled
+	}
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = "https://api.openai.com/v1"
 	}
 	return cfg
 }
@@ -200,9 +214,10 @@ type modelEntry struct {
 	APIKey        string `yaml:"api_key"`
 	BaseURL       string `yaml:"base_url"`
 	ContextWindow *int   `yaml:"context_window"`
-	// ImageEnabled is opt-in; YAML absence decodes as false.
-	ImageEnabled bool `yaml:"image_enabled"`
-	Default      bool `yaml:"default"`
+	// ImageEnabled is a pointer so YAML absence (use the built-in preset's
+	// default) is distinguishable from an explicit false.
+	ImageEnabled *bool `yaml:"image_enabled"`
+	Default      bool  `yaml:"default"`
 }
 
 type permConfig struct {
