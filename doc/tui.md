@@ -198,7 +198,7 @@ Composer input is blocked while an overlay is active (`OverlayBlocksComposer`).
 /something or Ctrl+K
   → ComposerPane local UI OR SubmitMsg with slash text
   → Submitter.dispatchSlash → CommandRegistry
-  → SessionCommands (/clear, /resume, …) or builtins
+  → SessionCommands (/clear) or builtins
   → ExtCommands (async) → ExtCommandResultMsg → palette push / toast
 ```
 

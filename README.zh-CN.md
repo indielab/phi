@@ -238,7 +238,7 @@ Anthropic Messages API；其余走 OpenAI 兼容的 `/chat/completions` 路径�
 编辑器支持：
 
 - `@` —— 模糊文件选择器（输入 `@` 后开始输入路径）
-- `/` —— 斜杠命令选择器（`/sessions`、`/resume`、`/clear`、`/diff`）
+- `/` —— 斜杠命令选择器（`/sessions`、`/clear`、`/diff`）
 - `?` —— 快捷键帮助选择器（列出 `/`、`!`、`@` 和按键绑定；`Esc` 关闭）
 - `!command` —— 在本地运行 shell 命令，并把输出流式写入对话记录
   （见 [命令](#命令)）
@@ -270,7 +270,7 @@ Anthropic Messages API；其余走 OpenAI 兼容的 `/chat/completions` 路径�
 | `/diff staged` | 暂存区 |
 | `/diff HEAD` | 最近一次提交（`git show`） |
 
-斜杠选择器里回车会把 `/diff` 连同一个空格填进输入框（和 `/resume` 一样）；再提交才打开。
+斜杠选择器里回车会把 `/diff` 连同一个空格填进输入框；再提交才打开。
 审阅层内：`j`/`k` 移动，`s` 左右对照，`i` 添加/编辑批注，`x` 删除，`a` 发给代理，
 `?` 帮助，`q` / `Esc` 关闭。批注保存在 `.phi/review.json`。
 
@@ -284,7 +284,6 @@ Anthropic Messages API；其余走 OpenAI 兼容的 `/chat/completions` 路径�
 | `phi update --check` | 只查询最新版本，不安装 |
 | `phi sessions list` | 列出当前目录的持久化会话 |
 | `/sessions` | 列出当前目录的会话（TUI 内） |
-| `/resume <id>` | 按 id 或唯一前缀恢复会话（TUI 内） |
 | `/clear` | 开启一个全新的空会话（TUI 内） |
 | `/diff` | 全屏 git 审阅 — 见 [Diff 审阅](#diff-审阅) |
 | `!command` | 在本地运行 shell 命令，把输出流式写入对话记录；`Esc` 取消 |
@@ -299,7 +298,6 @@ Anthropic Messages API；其余走 OpenAI 兼容的 `/chat/completions` 路径�
 
 - `phi sessions list` —— 列出当前目录的会话 id、修改时间和预览
 - TUI 内 `/sessions` —— 同上，在应用内查看
-- `/resume <id>` —— 继续一个会话（id 或唯一前缀）
 - `/clear` —— 开启全新会话（新 id、空对话记录）
 - `phi run --session <id>` / `phi run --continue-last` —— 无头模式恢复会话
 
