@@ -9,6 +9,7 @@ import (
 	"github.com/pulseaiclub/phi/internal/components"
 	"github.com/pulseaiclub/phi/internal/components/app"
 	"github.com/pulseaiclub/phi/internal/components/listpicker"
+	"github.com/pulseaiclub/phi/internal/components/palette"
 	"github.com/pulseaiclub/phi/internal/components/toast"
 	"github.com/pulseaiclub/phi/internal/tui/commands"
 	"github.com/pulseaiclub/phi/internal/tui/composer"
@@ -28,9 +29,9 @@ import (
 // Draw drains and Update applies. Agent lifecycle lives in controller.EngineController;
 // session→widget projection lives in TranscriptPane (Mapper/SubagentStore).
 //
-// Construction: cmd assembles App, controller.Bus, controller.EngineController and passes
-// them into NewEditor, which builds the CommandRegistry (commands.NewBuiltinRegistry).
-// Editor does not create controller.EngineController or fetch the project singleton.
+// cmd constructs Bus/Controller/App and passes them into NewEditor, which builds
+// builtins via commands.NewBuiltinRegistry. Editor does not create
+// controller.EngineController or fetch the project singleton.
 type Editor struct {
 	vx    *xui.XUI
 	App   *app.App
@@ -47,10 +48,7 @@ type Editor struct {
 
 	ctrl *controller.EngineController
 
-	commands   *commands.CommandRegistry
-	modelNames []string
-	skillPath  string
-
+	commands  *commands.CommandRegistry
 	sessions  *commands.SessionCommands
 	extCmds   *commands.ExtCommands
 	submitter *submit.Submitter
@@ -68,20 +66,16 @@ func NewEditor(
 	contextWindow int,
 	modelNames []string,
 ) *Editor {
-	registry := commands.NewBuiltinRegistry()
 	e := &Editor{
-		vx:         vx,
-		App:        application,
-		theme:      theme,
-		cwd:        cwd,
-		bus:        bus,
-		ctrl:       ctrl,
-		modelNames: append([]string(nil), modelNames...),
-		skillPath:  skillPath,
-		commands:   registry,
-		toast:      toast.Toast{Theme: theme},
-		composer:   composer.NewComposerPane(theme, model, cwd),
-		footer:     footer.NewFooterChrome(theme, contextWindow),
+		vx:       vx,
+		App:      application,
+		theme:    theme,
+		cwd:      cwd,
+		bus:      bus,
+		ctrl:     ctrl,
+		toast:    toast.Toast{Theme: theme},
+		composer: composer.NewComposerPane(theme, model, cwd),
+		footer:   footer.NewFooterChrome(theme, contextWindow),
 	}
 	e.transcript = transcript.NewTranscriptPane(theme, e.footer.Spinner(), "Phi "+version.Version)
 	e.transcript.SetUsageCallback(e.footer.UpdateTokenDisplay)
@@ -114,48 +108,6 @@ func NewEditor(
 			return e.vx != nil && e.vx.CopyToClipboard(text) == nil
 		},
 	)
-	e.extCmds = &commands.ExtCommands{
-		Registry: e.commands,
-		Ctrl:     e.ctrl,
-		Composer: e.composer,
-		Footer:   e.footer,
-		Bus:      e.bus,
-	}
-	e.sessions = commands.NewSessionCommands(
-		e.ctrl,
-		e.transcript,
-		e.footer,
-		e.bus,
-		e.extCmds.Sync,
-	)
-
-	var bridge *commandBridge
-	e.submitter = submit.NewSubmitter(
-		e.ctrl,
-		e.commands,
-		e.transcript,
-		e.footer.Activity(),
-		e.composer,
-		e.bus,
-		func() commands.CommandContext {
-			if bridge == nil {
-				return commands.CommandContext{}
-			}
-			return bridge.context()
-		},
-		e.overlays.PermissionActive,
-		e.overlays.ContinueActive,
-		e.overlays.ConfirmActive,
-		e.overlays.ResolvePermission,
-		e.overlays.ResolveContinue,
-		e.overlays.ResolveConfirm,
-	)
-	e.extCmds.Submitter = e.submitter
-	e.sessions.OpenPicker = e.composer.ShowSessionList
-	e.sessions.StreamActive = e.submitter.StreamActive
-	e.composer.SetListPickHandler(func(item listpicker.Item) {
-		e.sessions.Accept(item.ID)
-	})
 	e.diff = diffpane.New(e.theme, cwd,
 		func(text string) {
 			e.Publish(controller.SubmitMsg{Text: text})
@@ -167,20 +119,49 @@ func NewEditor(
 			e.Publish(controller.ToastMsg{Message: msg, Kind: toast.ToastSuccess, Duration: 2 * time.Second})
 		},
 	)
-	bridge = newCommandBridge(
+
+	builtins := commands.NewBuiltinRegistry(
 		e.bus,
-		e.composer,
 		e.ctrl,
-		e.submitter,
-		e.sessions,
-		e.extCmds,
-		e.modelNames,
-		e.skillPath,
-		func(args []string) {
-			e.openDiff(args)
-		},
+		e.composer,
+		e.transcript,
+		e.footer,
+		modelNames,
+		skillPath,
+		e.openDiff,
 	)
-	e.extCmds.CommandCtx = bridge.context
+	e.commands = builtins.Registry
+	e.sessions = builtins.Sessions
+	e.extCmds = builtins.Ext
+
+	cmdCtx := commands.NewContext(e.bus, func(title string, cmds []palette.PaletteCommand) {
+		e.composer.PushPalette(title, cmds)
+	})
+	e.submitter = submit.NewSubmitter(
+		e.ctrl,
+		e.commands,
+		e.transcript,
+		e.footer.Activity(),
+		e.composer,
+		e.bus,
+		func() commands.Context { return cmdCtx },
+		e.overlays.PermissionActive,
+		e.overlays.ContinueActive,
+		e.overlays.ConfirmActive,
+		e.overlays.ResolvePermission,
+		e.overlays.ResolveContinue,
+		e.overlays.ResolveConfirm,
+	)
+	builtins.Bind(
+		e.submitter,
+		func() commands.Context { return cmdCtx },
+		e.composer.ShowSessionList,
+		e.submitter.StreamActive,
+	)
+
+	e.composer.SetListPickHandler(func(item listpicker.Item) {
+		e.sessions.Accept(item.ID)
+	})
 	e.composer.Wire(
 		e.transcript,
 		e.submitter,

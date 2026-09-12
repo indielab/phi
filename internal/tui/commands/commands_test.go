@@ -15,7 +15,7 @@ import (
 
 func TestThemeCommand_Submenu(t *testing.T) {
 	var got string
-	cmd := ThemeCommand(func(name string) { got = name })
+	cmd := buildThemePalette(func(name string) { got = name })
 	assert.Equal(t, "settings", cmd.Noun)
 	assert.Equal(t, "theme", cmd.Verb)
 	assert.Equal(t, "Select Theme", cmd.SubmenuTitle)
@@ -29,7 +29,7 @@ func TestThemeCommand_Submenu(t *testing.T) {
 
 func TestPermissionsCommand_Toggle(t *testing.T) {
 	var bypass *bool
-	cmd := PermissionsCommand(func(v bool) { bypass = &v })
+	cmd := buildPermissionsPalette(func(v bool) { bypass = &v })
 	assert.Equal(t, "settings", cmd.Noun)
 	assert.Equal(t, "permissions", cmd.Verb)
 	require.Len(t, cmd.Submenu, 2)
@@ -44,7 +44,7 @@ func TestPermissionsCommand_Toggle(t *testing.T) {
 
 func TestAgentsCommand_Toggle(t *testing.T) {
 	var enabled *bool
-	cmd := AgentsCommand(func(v bool) { enabled = &v }, nil, nil)
+	cmd := buildAgentsPalette(func(v bool) { enabled = &v }, nil, nil)
 	assert.Equal(t, "settings", cmd.Noun)
 	assert.Equal(t, "agents", cmd.Verb)
 	require.Len(t, cmd.Submenu, 3)
@@ -59,7 +59,7 @@ func TestAgentsCommand_Toggle(t *testing.T) {
 
 func TestAgentsCommand_RoleModels(t *testing.T) {
 	var gotRole, gotName string
-	cmd := AgentsCommand(nil, func(role, name string) {
+	cmd := buildAgentsPalette(nil, func(role, name string) {
 		gotRole, gotName = role, name
 	}, []string{"cheap", "strong"})
 	require.Len(t, cmd.Submenu, 3)
@@ -91,7 +91,7 @@ func TestExtensionsCommand_ListAndReload(t *testing.T) {
 	var reloaded bool
 	var pushedTitle string
 	var pushed []palette.PaletteCommand
-	cmd := ExtensionsCommand(func() []palette.PaletteCommand {
+	cmd := buildExtensionsPalette(func() []palette.PaletteCommand {
 		return []palette.PaletteCommand{{
 			ID:       "ext-demo",
 			Verb:     "demo  [project]",
@@ -139,7 +139,7 @@ Do the work.
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644))
 
 	var got string
-	cmd := SkillsCommand(dir, func(name string) { got = name })
+	cmd := buildSkillsPalette(dir, func(name string) { got = name })
 	assert.Equal(t, "skills", cmd.Noun)
 	assert.Equal(t, "invoke", cmd.Verb)
 	require.Len(t, cmd.Submenu, 1)
@@ -150,15 +150,18 @@ Do the work.
 }
 
 func TestSkillsCommand_Empty(t *testing.T) {
-	cmd := SkillsCommand(t.TempDir(), nil)
+	cmd := buildSkillsPalette(t.TempDir(), nil)
 	require.Len(t, cmd.Submenu, 1)
 	assert.True(t, cmd.Submenu[0].Disabled)
 }
 
 func TestFilterSlashCommands(t *testing.T) {
-	r := NewBuiltinRegistry()
+	r := NewCommandRegistry()
+	(&SessionCommands{}).Register(r)
+	(&DiffCommands{}).Register(r)
+
 	all := r.FilterSlash("")
-	require.Len(t, all, 3)
+	require.Len(t, all, 3) // sessions, clear, diff
 
 	clr := r.FilterSlash("cle")
 	require.Len(t, clr, 1)
@@ -173,15 +176,27 @@ func TestFilterSlashCommands(t *testing.T) {
 }
 
 func TestCommandRegistry_DispatchSlash(t *testing.T) {
-	r := NewBuiltinRegistry()
+	r := NewCommandRegistry()
 	var sessions, cleared int
 	bus := controller.NewBus(nil)
+	ctx := NewContext(bus, nil)
 
-	ctx := CommandContext{
-		ShowSessions: func() { sessions++ },
-		ClearSession: func() { cleared++ },
-		Bus:          bus,
-	}
+	r.Register(Command{
+		Name:  "sessions",
+		Slash: true,
+		Run: func(Context, []string) error {
+			sessions++
+			return nil
+		},
+	})
+	r.Register(Command{
+		Name:  "clear",
+		Slash: true,
+		Run: func(Context, []string) error {
+			cleared++
+			return nil
+		},
+	})
 
 	assert.True(t, r.DispatchSlash("/sessions", ctx))
 	assert.Equal(t, 1, sessions)
@@ -190,7 +205,9 @@ func TestCommandRegistry_DispatchSlash(t *testing.T) {
 	assert.Equal(t, 1, cleared)
 
 	var spec []string
-	ctx.OpenDiff = func(args []string) { spec = append([]string(nil), args...) }
+	(&DiffCommands{
+		Open: func(args []string) { spec = append([]string(nil), args...) },
+	}).Register(r)
 	assert.True(t, r.DispatchSlash("/diff staged", ctx))
 	assert.Equal(t, []string{"staged"}, spec)
 
@@ -204,27 +221,41 @@ func TestCommandRegistry_DispatchSlash(t *testing.T) {
 }
 
 func TestCommandRegistry_BuildPalette(t *testing.T) {
-	r := NewBuiltinRegistry()
+	r := NewCommandRegistry()
 	var model string
 	var pushed bool
-	cmds := r.BuildPalette(CommandContext{
-		ModelNames: []string{"gpt"},
-		SetModel:   func(name string) { model = name },
-		PushSubmenu: func(string, []palette.PaletteCommand) {
-			pushed = true
-		},
-		ListExtensions: func() []palette.PaletteCommand {
-			return []palette.PaletteCommand{{ID: "ext-x", Verb: "x", Disabled: true}}
+	bus := controller.NewBus(nil)
+	ctx := NewContext(bus, func(string, []palette.PaletteCommand) {
+		pushed = true
+	})
+
+	r.Register(Command{
+		Name: "settings-model",
+		Build: func(Context) palette.PaletteCommand {
+			return buildModelPalette(func(name string) { model = name }, []string{"gpt"})
 		},
 	})
-	require.GreaterOrEqual(t, len(cmds), 6)
+	r.Register(Command{
+		Name: "extensions",
+		Build: func(ctx Context) palette.PaletteCommand {
+			var push func(string, []palette.PaletteCommand)
+			if ctx != nil {
+				push = ctx.PushSubmenu
+			}
+			return buildExtensionsPalette(func() []palette.PaletteCommand {
+				return []palette.PaletteCommand{{ID: "ext-x", Verb: "x", Disabled: true}}
+			}, nil, push)
+		},
+	})
+	(&SkillsCommands{SkillPath: t.TempDir()}).Register(r)
 
-	// settings → model → gpt
+	cmds := r.BuildPalette(ctx)
+	require.GreaterOrEqual(t, len(cmds), 3)
+
 	require.NotEmpty(t, cmds[0].Submenu)
 	cmds[0].Submenu[0].Run()
 	assert.Equal(t, "gpt", model)
 
-	// extensions → list uses PushSubmenu
 	var extCmd palette.PaletteCommand
 	for _, c := range cmds {
 		if c.ID == "extensions" {
@@ -242,21 +273,22 @@ func TestCommandRegistry_RegisterReplace(t *testing.T) {
 	r.Register(Command{
 		Name:  "foo",
 		Slash: true,
-		Run:   func(CommandContext) error { return nil },
+		Run:   func(Context, []string) error { return nil },
 	})
 	r.Register(Command{
 		Name:        "foo",
 		Description: "replaced",
 		Slash:       true,
 		Insert:      "/foo ",
-		Run:         func(CommandContext) error { return nil },
+		Run:         func(Context, []string) error { return nil },
 	})
 	assert.Equal(t, "/foo ", r.LookupInsert("foo"))
 	assert.Equal(t, "replaced", r.SlashCommands()[0].Description)
 }
 
 func TestCommandRegistry_ExtCommandsDoNotReplaceBuiltins(t *testing.T) {
-	r := NewBuiltinRegistry()
+	r := NewCommandRegistry()
+	(&SessionCommands{}).Register(r)
 	assert.False(t, r.registerExt(Command{Name: "clear", Slash: true, Insert: "/hijack"}))
 	assert.Equal(t, "/clear", r.LookupInsert("clear"))
 
@@ -273,7 +305,7 @@ func TestCommandRegistry_NeedsArgs(t *testing.T) {
 		Name:      "plan",
 		Slash:     true,
 		NeedsArgs: true,
-		Run:       func(CommandContext) error { return nil },
+		Run:       func(Context, []string) error { return nil },
 	})
 	assert.Equal(t, "/plan ", r.LookupInsert("plan"))
 	insert, ok := r.IncompleteSlash("/plan")

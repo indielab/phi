@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -8,17 +9,21 @@ import (
 	"github.com/pulseaiclub/phi/internal/components/palette"
 	"github.com/pulseaiclub/phi/internal/components/toast"
 	"github.com/pulseaiclub/phi/internal/debuglog"
+	"github.com/pulseaiclub/phi/internal/extension"
 	"github.com/pulseaiclub/phi/internal/tui/controller"
 )
 
+// extComposer updates the palette command list.
 type extComposer interface {
 	SetPaletteCommands([]palette.PaletteCommand)
 }
 
+// extFooter updates the extension status indicator.
 type extFooter interface {
 	SetExtensionStatus(status string)
 }
 
+// extSubmitter submits text to the agent and reports busy state.
 type extSubmitter interface {
 	IsBusy() bool
 	Submit(text string)
@@ -32,17 +37,10 @@ type ExtCommands struct {
 	Footer     extFooter
 	Submitter  extSubmitter
 	Bus        *controller.Bus
-	CommandCtx func() CommandContext
+	CommandCtx func() Context
 
 	gen     atomic.Uint64
 	running atomic.Bool
-}
-
-func (h *ExtCommands) showToast(msg string, kind toast.ToastKind) {
-	if h == nil {
-		return
-	}
-	h.Bus.Publish(controller.ToastMsg{Message: msg, Kind: kind, Duration: 3 * time.Second})
 }
 
 // Sync replaces extension-sourced slash commands from the current Runner.
@@ -64,7 +62,7 @@ func (h *ExtCommands) Sync() {
 			}
 		}
 	}
-	ctx := CommandContext{}
+	var ctx Context
 	if h.CommandCtx != nil {
 		ctx = h.CommandCtx()
 	}
@@ -77,13 +75,13 @@ func (h *ExtCommands) slashCommand(name, desc string, needsArgs bool) Command {
 		Description: desc,
 		Slash:       true,
 		NeedsArgs:   needsArgs,
-		Run: func(ctx CommandContext) error {
+		Run: func(ctx Context, args []string) error {
 			if h.running.Load() {
-				ctx.toast("An extension command is already running", toast.ToastWarning, 3*time.Second)
+				ctx.Toast("An extension command is already running", toast.ToastWarning, 3*time.Second)
 				return nil
 			}
-			args := strings.TrimSpace(strings.Join(ctx.Args, " "))
-			go h.run(name, args)
+			text := strings.TrimSpace(strings.Join(args, " "))
+			go h.run(name, text)
 			return nil
 		},
 	}
@@ -124,20 +122,155 @@ func (h *ExtCommands) Apply(msg controller.ExtCommandResultMsg) {
 		return
 	}
 	if msg.Err != "" {
-		h.showToast(msg.Err, toast.ToastError)
+		publishToast(h.Bus, msg.Err, toast.ToastError, 3*time.Second)
 		return
 	}
 	if msg.StatusSet {
 		h.Footer.SetExtensionStatus(msg.Status)
 	}
 	if msg.Toast != "" {
-		h.showToast(msg.Toast, toast.ToastSuccess)
+		publishToast(h.Bus, msg.Toast, toast.ToastSuccess, 3*time.Second)
 	}
 	if msg.Submit != "" {
 		if h.Submitter.IsBusy() {
-			h.showToast("Cannot submit while a reply is running", toast.ToastWarning)
+			publishToast(h.Bus, "Cannot submit while a reply is running", toast.ToastWarning, 3*time.Second)
 			return
 		}
 		h.Submitter.Submit(msg.Submit)
 	}
+}
+
+// Register wires the extensions palette command (list / reload).
+func (h *ExtCommands) Register(r *CommandRegistry) {
+	if h == nil || r == nil {
+		return
+	}
+	r.Register(Command{
+		Name: "extensions",
+		Build: func(ctx Context) palette.PaletteCommand {
+			var push func(string, []palette.PaletteCommand)
+			if ctx != nil {
+				push = ctx.PushSubmenu
+			}
+			return buildExtensionsPalette(h.ListEntries, h.Reload, push)
+		},
+	})
+}
+
+// ListEntries builds disabled palette rows from discovery results + warnings.
+func (h *ExtCommands) ListEntries() []palette.PaletteCommand {
+	if h == nil || h.Ctrl == nil {
+		return ExtensionListEntries(nil, nil, nil)
+	}
+	found, warns, err := h.Ctrl.ListExtensions()
+	return ExtensionListEntries(found, warns, err)
+}
+
+// Reload rescans extensions and refreshes the slash/palette surface.
+func (h *ExtCommands) Reload() {
+	if h == nil || h.Ctrl == nil {
+		return
+	}
+	n, warns, err := h.Ctrl.ReloadExtensions()
+	if err != nil {
+		publishToast(h.Bus, "Extensions reload: "+err.Error(), toast.ToastError, 3*time.Second)
+		return
+	}
+	h.Sync()
+	if len(warns) > 0 {
+		h.Bus.Publish(controller.ToastMsg{
+			Message:  fmt.Sprintf("Extensions: reloaded %d (%d warning(s))", n, len(warns)),
+			Kind:     toast.ToastWarning,
+			Duration: 3 * time.Second,
+		})
+		return
+	}
+	h.Bus.Publish(controller.ToastMsg{
+		Message:  fmt.Sprintf("Extensions: reloaded %d", n),
+		Kind:     toast.ToastSuccess,
+		Duration: 2 * time.Second,
+	})
+}
+
+func buildExtensionsPalette(
+	listFn func() []palette.PaletteCommand,
+	reload func(),
+	push func(string, []palette.PaletteCommand),
+) palette.PaletteCommand {
+	return palette.PaletteCommand{
+		ID:           "extensions",
+		Noun:         "extensions",
+		Verb:         "manage",
+		Keywords:     []string{"extension", "plugin", "pxb", "reload", "list"},
+		SubmenuTitle: "Extensions",
+		Submenu: []palette.PaletteCommand{
+			{
+				ID:       "extensions-list",
+				Verb:     "list",
+				Keywords: []string{"show", "status", "loaded"},
+				Run: func() {
+					cmds := []palette.PaletteCommand{{
+						ID:       "extensions-list-empty",
+						Verb:     "No extensions found",
+						Disabled: true,
+					}}
+					if listFn != nil {
+						if built := listFn(); len(built) > 0 {
+							cmds = built
+						}
+					}
+					if push != nil {
+						push("Extensions on disk", cmds)
+					}
+				},
+			},
+			{
+				ID:       "extensions-reload",
+				Verb:     "reload",
+				Keywords: []string{"refresh", "rescan", "discover"},
+				Run: func() {
+					if reload != nil {
+						reload()
+					}
+				},
+			},
+		},
+	}
+}
+
+// ExtensionListEntries builds disabled palette rows from discovery results + warnings.
+func ExtensionListEntries(found []extension.Discovered, warns []extension.Warning, err error) []palette.PaletteCommand {
+	if err != nil {
+		return []palette.PaletteCommand{{
+			ID:       "extensions-list-err",
+			Verb:     "error: " + err.Error(),
+			Disabled: true,
+		}}
+	}
+	out := make([]palette.PaletteCommand, 0, len(found)+len(warns)+1)
+	if len(found) == 0 && len(warns) == 0 {
+		out = append(out, palette.PaletteCommand{
+			ID:       "extensions-list-empty",
+			Verb:     "No extensions found",
+			Disabled: true,
+		})
+		return out
+	}
+	for _, d := range found {
+		out = append(out, palette.PaletteCommand{
+			ID:       "ext-" + d.ID,
+			Verb:     extension.FormatDiscovered(d),
+			Keywords: []string{d.ID, d.Source},
+			Disabled: true,
+		})
+	}
+	for i, w := range warns {
+		out = append(out, palette.PaletteCommand{
+			ID:       fmt.Sprintf("extensions-warn-%d", i),
+			Verb:     "warn: " + w.String(),
+			Keywords: []string{"warning", "error"},
+			Disabled: true,
+		})
+	}
+	return out
 }
