@@ -16,6 +16,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Removed
 
+- `/resume` slash command — use `/sessions` picker or `phi run --session <id>` instead.
+
 ### Fixed
 
 ### Security

@@ -31,22 +31,6 @@ func registerBuiltinCommands(r *CommandRegistry) {
 		},
 	})
 	r.Register(Command{
-		Name:        "resume",
-		Description: "Resume a session in this directory — /resume <id>",
-		Slash:       true,
-		NeedsArgs:   true,
-		Insert:      "/resume ",
-		Run: func(ctx CommandContext) error {
-			if len(ctx.Args) < 1 {
-				return nil
-			}
-			if ctx.ResumeSession != nil {
-				ctx.ResumeSession(ctx.Args[0])
-			}
-			return nil
-		},
-	})
-	r.Register(Command{
 		Name:        "clear",
 		Description: "Start a new empty session",
 		Slash:       true,

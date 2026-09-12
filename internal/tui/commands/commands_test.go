@@ -158,12 +158,7 @@ func TestSkillsCommand_Empty(t *testing.T) {
 func TestFilterSlashCommands(t *testing.T) {
 	r := NewBuiltinRegistry()
 	all := r.FilterSlash("")
-	require.Len(t, all, 4)
-
-	resu := r.FilterSlash("resu")
-	require.Len(t, resu, 1)
-	assert.Equal(t, "resume", resu[0].Path)
-	assert.Contains(t, resu[0].Description, "Resume")
+	require.Len(t, all, 3)
 
 	clr := r.FilterSlash("cle")
 	require.Len(t, clr, 1)
@@ -172,7 +167,6 @@ func TestFilterSlashCommands(t *testing.T) {
 	none := r.FilterSlash("zzz")
 	assert.Empty(t, none)
 
-	assert.Equal(t, "/resume ", r.LookupInsert("resume"))
 	assert.Equal(t, "/sessions", r.LookupInsert("sessions"))
 	assert.Equal(t, "/clear", r.LookupInsert("clear"))
 	assert.Equal(t, "/diff ", r.LookupInsert("diff"))
@@ -181,26 +175,16 @@ func TestFilterSlashCommands(t *testing.T) {
 func TestCommandRegistry_DispatchSlash(t *testing.T) {
 	r := NewBuiltinRegistry()
 	var sessions, cleared int
-	var resumeID string
 	bus := controller.NewBus(nil)
 
 	ctx := CommandContext{
-		ShowSessions:  func() { sessions++ },
-		ResumeSession: func(id string) { resumeID = id },
-		ClearSession:  func() { cleared++ },
-		Bus:           bus,
+		ShowSessions: func() { sessions++ },
+		ClearSession: func() { cleared++ },
+		Bus:          bus,
 	}
 
 	assert.True(t, r.DispatchSlash("/sessions", ctx))
 	assert.Equal(t, 1, sessions)
-
-	assert.True(t, r.DispatchSlash("/resume abc", ctx))
-	assert.Equal(t, "abc", resumeID)
-
-	insert, ok := r.IncompleteSlash("/resume")
-	assert.True(t, ok)
-	assert.Equal(t, "/resume ", insert)
-	assert.Empty(t, drainToast(t, bus))
 
 	assert.True(t, r.DispatchSlash("/clear", ctx))
 	assert.Equal(t, 1, cleared)

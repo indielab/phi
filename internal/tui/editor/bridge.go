@@ -58,8 +58,7 @@ func (b *commandBridge) context() commands.CommandContext {
 		PushSubmenu: func(title string, cmds []palette.PaletteCommand) {
 			b.composer.PushPalette(title, cmds)
 		},
-		ShowSessions:  b.sessions.Show,
-		ResumeSession: b.sessions.Resume,
+		ShowSessions: b.sessions.Show,
 		ClearSession: func() {
 			if b.submitter != nil && b.submitter.StreamActive() {
 				b.toast("Cannot clear while a reply or command is running", toast.ToastWarning, 3*time.Second)

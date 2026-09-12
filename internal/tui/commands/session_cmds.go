@@ -10,7 +10,7 @@ import (
 	"github.com/pulseaiclub/phi/internal/tui/transcript"
 )
 
-// SessionCommands owns /sessions, /resume, and /clear UI side effects.
+// SessionCommands owns /sessions and /clear UI side effects.
 type SessionCommands struct {
 	Ctrl       *controller.EngineController
 	Transcript *transcript.TranscriptPane
@@ -95,11 +95,11 @@ func (s *SessionCommands) Accept(id string) {
 		s.showToast("Cannot resume while a reply or command is running", toast.ToastWarning, 3*time.Second)
 		return
 	}
-	s.Resume(id)
+	s.resume(id)
 }
 
-// Resume loads a prior session by id into the UI.
-func (s *SessionCommands) Resume(id string) {
+// resume loads a prior session by id into the UI.
+func (s *SessionCommands) resume(id string) {
 	if s == nil {
 		return
 	}

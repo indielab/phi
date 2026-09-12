@@ -21,9 +21,8 @@ type CommandContext struct {
 	Bus         *controller.Bus
 	PushSubmenu func(title string, cmds []palette.PaletteCommand)
 
-	ShowSessions  func()
-	ResumeSession func(id string)
-	ClearSession  func() // may toast internally if busy
+	ShowSessions func()
+	ClearSession func() // may toast internally if busy
 
 	SetModel         func(name string)
 	ApplyTheme       func(name string)
