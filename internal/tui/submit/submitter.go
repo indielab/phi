@@ -22,7 +22,7 @@ type Submitter struct {
 	composer   composer.Input
 	bash       *BashRunner
 
-	commandContext func() commands.CommandContext
+	commandContext func() commands.Context
 	bus            *controller.Bus
 
 	permissionActive  func() bool
@@ -42,7 +42,7 @@ func NewSubmitter(
 	activity *controller.ActivityHandler,
 	composer composer.Input,
 	bus *controller.Bus,
-	commandContext func() commands.CommandContext,
+	commandContext func() commands.Context,
 	permissionActive func() bool,
 	continueActive func() bool,
 	confirmActive func() bool,

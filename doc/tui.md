@@ -81,16 +81,14 @@ ui.StartBranchWatch()
 app.Run(ui)
 ```
 
-Inside `NewEditor`, the `CommandRegistry` (builtins) is built first, then panes in dependency order:
-
-1. `FooterChrome` — status slot + bottom footer row (needs `contextWindow`)
-2. `TranscriptPane` — shares footer spinner; usage callback → footer status slot
-3. `ComposerPane` — chat chrome; footer binds composer for status slot
-4. `Overlays` — permission/continue UI; uses footer activity + composer focus
-5. `SessionCommands`, `ExtCommands`, `Submitter` (owns `BashRunner`) — explicit deps, no `*Editor` fields
-6. `ComposerPane.Wire(...)` — connects composer keyboard path to submitter, overlays, bus
+Inside `NewEditor`, panes are built first, then `commands.NewBuiltinRegistry`
+assembles the registry and domain handlers (`SessionCommands`, `ExtCommands`,
+settings/skills/diff). `Builtin.Bind` attaches Submitter / picker / stream
+guard after `Submitter` exists. `ComposerPane.Wire(...)` connects the keyboard
+path last.
 
 `Editor` does **not** call `project.GetDefaultProject` or construct `Controller`.
+It does **not** own command side effects — those live in `internal/tui/commands`.
 
 ---
 
@@ -202,8 +200,9 @@ Composer input is blocked while an overlay is active (`OverlayBlocksComposer`).
   → ExtCommands (async) → ExtCommandResultMsg → palette push / toast
 ```
 
-`commandBridge` in `editor` builds `commands.CommandContext` for builtins
-(model switch, theme, permissions, agents on/off + per-role models, …).
+`commands.NewBuiltinRegistry` owns slash/palette registration. Domain handlers
+(`SessionCommands`, `SettingsCommands`, `ExtCommands`, …) call `Ctrl` / `Bus` /
+composer directly — no Editor closures.
 
 ### 6. Background chrome
 

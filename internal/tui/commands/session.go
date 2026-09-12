@@ -19,7 +19,7 @@ type SessionCommands struct {
 	SyncHooks  func()
 	// OpenPicker opens the session list overlay. When nil, Show toasts only.
 	OpenPicker func(items []session.SessionMeta, currentID string)
-	// StreamActive reports whether resume should be blocked.
+	// StreamActive reports whether resume/clear should be blocked.
 	StreamActive func() bool
 	// SessionDir / SessionID override Ctrl for tests when set.
 	SessionDir func() string
@@ -43,11 +43,31 @@ func NewSessionCommands(
 	}
 }
 
-func (s *SessionCommands) showToast(msg string, kind toast.ToastKind, d time.Duration) {
-	if s == nil {
+// Register wires /sessions and /clear into r.
+func (s *SessionCommands) Register(r *CommandRegistry) {
+	if s == nil || r == nil {
 		return
 	}
-	s.Bus.Publish(controller.ToastMsg{Message: msg, Kind: kind, Duration: d})
+	r.Register(Command{
+		Name:        "sessions",
+		Description: "Browse and resume sessions for this directory",
+		Slash:       true,
+		Insert:      "/sessions",
+		Run: func(_ Context, _ []string) error {
+			s.Show()
+			return nil
+		},
+	})
+	r.Register(Command{
+		Name:        "clear",
+		Description: "Start a new empty session",
+		Slash:       true,
+		Insert:      "/clear",
+		Run: func(_ Context, _ []string) error {
+			s.Clear()
+			return nil
+		},
+	})
 }
 
 // Show opens the session picker for the current session directory.
@@ -58,15 +78,15 @@ func (s *SessionCommands) Show() {
 	dir, currentID := s.dirAndID()
 	list, err := session.ListSessions(dir)
 	if err != nil {
-		s.showToast(err.Error(), toast.ToastError, 3*time.Second)
+		publishToast(s.Bus, err.Error(), toast.ToastError, 3*time.Second)
 		return
 	}
 	if len(list) == 0 {
-		s.showToast("No sessions for this directory", toast.ToastWarning, 3*time.Second)
+		publishToast(s.Bus, "No sessions for this directory", toast.ToastWarning, 3*time.Second)
 		return
 	}
 	if s.OpenPicker == nil {
-		s.showToast("Session picker unavailable", toast.ToastError, 3*time.Second)
+		publishToast(s.Bus, "Session picker unavailable", toast.ToastError, 3*time.Second)
 		return
 	}
 	s.OpenPicker(list, currentID)
@@ -92,7 +112,7 @@ func (s *SessionCommands) Accept(id string) {
 		return
 	}
 	if s.StreamActive != nil && s.StreamActive() {
-		s.showToast("Cannot resume while a reply or command is running", toast.ToastWarning, 3*time.Second)
+		publishToast(s.Bus, "Cannot resume while a reply or command is running", toast.ToastWarning, 3*time.Second)
 		return
 	}
 	s.resume(id)
@@ -105,7 +125,7 @@ func (s *SessionCommands) resume(id string) {
 	}
 	warn, err := s.Ctrl.Resume(id)
 	if err != nil {
-		s.showToast(err.Error(), toast.ToastError, 4*time.Second)
+		publishToast(s.Bus, err.Error(), toast.ToastError, 4*time.Second)
 		return
 	}
 	if s.SyncHooks != nil {
@@ -116,20 +136,23 @@ func (s *SessionCommands) resume(id string) {
 	s.Transcript.StickToBottom()
 	msg := "Resumed " + shortSessionID(s.Ctrl.SessionID())
 	if warn != "" {
-		s.showToast(msg+" · "+warn, toast.ToastWarning, 4*time.Second)
+		publishToast(s.Bus, msg+" · "+warn, toast.ToastWarning, 4*time.Second)
 		return
 	}
-	s.showToast(msg, toast.ToastSuccess, 3*time.Second)
+	publishToast(s.Bus, msg, toast.ToastSuccess, 3*time.Second)
 }
 
-// Clear starts a new empty session. Caller must ensure the stream is idle
-// (see Submitter.StreamActive / CommandBridge ClearSession).
+// Clear starts a new empty session. Blocks while a stream or extension command is active.
 func (s *SessionCommands) Clear() {
 	if s == nil {
 		return
 	}
+	if s.StreamActive != nil && s.StreamActive() {
+		publishToast(s.Bus, "Cannot clear while a reply or command is running", toast.ToastWarning, 3*time.Second)
+		return
+	}
 	if err := s.Ctrl.Clear(); err != nil {
-		s.showToast(err.Error(), toast.ToastError, 4*time.Second)
+		publishToast(s.Bus, err.Error(), toast.ToastError, 4*time.Second)
 		return
 	}
 	s.Transcript.LoadReplay(s.Ctrl.ReplaySnapshot())
@@ -138,7 +161,7 @@ func (s *SessionCommands) Clear() {
 	s.Footer.Activity().Apply(controller.ActivityIdle)
 	s.Transcript.Sync()
 	s.Transcript.StickToBottom()
-	s.showToast("Cleared "+shortSessionID(s.Ctrl.SessionID()), toast.ToastSuccess, 3*time.Second)
+	publishToast(s.Bus, "Cleared "+shortSessionID(s.Ctrl.SessionID()), toast.ToastSuccess, 3*time.Second)
 }
 
 func shortSessionID(id string) string {

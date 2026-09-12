@@ -50,7 +50,7 @@ func newTestSubmitter(
 		activity,
 		composer,
 		nil,
-		func() commands.CommandContext { return commands.CommandContext{} },
+		func() commands.Context { return commands.NewContext(nil, nil) },
 		nil, nil, nil,
 		nil, nil, nil,
 	)
@@ -77,7 +77,7 @@ func TestSubmitter_Submit_unknownSlashFallsThroughToAgent(t *testing.T) {
 	th := components.DefaultTheme()
 	spin := status.NewSpinner(th.ToolName)
 	tp := transcript.NewTranscriptPane(th, spin, "Phi test")
-	sub := newTestSubmitter(t, tp, nil, nil, commands.NewBuiltinRegistry())
+	sub := newTestSubmitter(t, tp, nil, nil, commands.NewCommandRegistry())
 	sub.Submit("/not-a-real-command")
 	require.Len(t, tp.Snapshot().Messages, 1)
 	assert.Equal(t, "/not-a-real-command", tp.Snapshot().Messages[0].Text)
@@ -104,7 +104,7 @@ func TestSubmitter_Submit_needsArgsRefillsComposer(t *testing.T) {
 		Name:      "plan",
 		Slash:     true,
 		NeedsArgs: true,
-		Run:       func(commands.CommandContext) error { return nil },
+		Run:       func(commands.Context, []string) error { return nil },
 	})
 	sub := newTestSubmitter(t, tp, nil, comp, reg)
 	sub.Submit("/plan")

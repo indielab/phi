@@ -3,49 +3,14 @@ package commands
 import (
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/pulseaiclub/phi/internal/components/mention"
 	"github.com/pulseaiclub/phi/internal/components/palette"
-	"github.com/pulseaiclub/phi/internal/components/toast"
-	"github.com/pulseaiclub/phi/internal/tui/controller"
 )
-
-// CommandContext is the capability surface passed to command Run / palette
-// builders. Callers fill only what they need; nil funcs are no-ops and a
-// nil Bus swallows publishes.
-// It must not hold *Editor (keeps commands free of the root widget).
-type CommandContext struct {
-	Args []string // slash args after the command name
-
-	Bus         *controller.Bus
-	PushSubmenu func(title string, cmds []palette.PaletteCommand)
-
-	ShowSessions func()
-	ClearSession func() // may toast internally if busy
-
-	SetModel         func(name string)
-	ApplyTheme       func(name string)
-	SetPermissions   func(bypass bool)
-	SetAgents        func(enabled bool)
-	SetRoleModel     func(role, name string) // name "" → inherit parent
-	ReloadExtensions func()
-	ListExtensions   func() []palette.PaletteCommand
-	AddSkill         func(name string)
-
-	OpenDiff func(args []string) // /diff [staged|HEAD|git-diff-args]
-
-	ModelNames []string
-	SkillPath  string
-}
-
-func (ctx CommandContext) toast(msg string, kind toast.ToastKind, d time.Duration) {
-	ctx.Bus.Publish(controller.ToastMsg{Message: msg, Kind: kind, Duration: d})
-}
 
 // Command is one registered slash and/or palette entry.
 type Command struct {
-	Name        string // without leading slash, e.g. "resume"
+	Name        string
 	Description string
 	Slash       bool
 	// Insert is written into the composer on slash-picker accept.
@@ -57,11 +22,11 @@ type Command struct {
 	// commands use a trailing Insert space without NeedsArgs.
 	NeedsArgs bool
 
-	// Run handles slash dispatch (and may be unused for palette-only trees).
-	Run func(ctx CommandContext) error
+	// Run handles slash dispatch. Nil for palette-only commands.
+	Run func(ctx Context, args []string) error
 
-	// PaletteRoot builds a Ctrl+K root row when non-nil.
-	PaletteRoot func(ctx CommandContext) palette.PaletteCommand
+	// Build builds a Ctrl+K palette entry. Nil for slash-only commands.
+	Build func(ctx Context) palette.PaletteCommand
 
 	fromExt bool // dropped on extensions reload; cannot replace builtins
 }
@@ -159,7 +124,7 @@ func (r *CommandRegistry) clearExtCommands() {
 }
 
 // DispatchSlash runs a `/name …` line. Returns false if not a known slash command.
-func (r *CommandRegistry) DispatchSlash(text string, ctx CommandContext) bool {
+func (r *CommandRegistry) DispatchSlash(text string, ctx Context) bool {
 	fields := strings.Fields(text)
 	if len(fields) == 0 {
 		return false
@@ -169,8 +134,7 @@ func (r *CommandRegistry) DispatchSlash(text string, ctx CommandContext) bool {
 	if !ok || !cmd.Slash || cmd.Run == nil {
 		return false
 	}
-	ctx.Args = fields[1:]
-	_ = cmd.Run(ctx)
+	_ = cmd.Run(ctx, fields[1:])
 	return true
 }
 
@@ -223,15 +187,15 @@ func (r *CommandRegistry) IncompleteSlash(text string) (insert string, ok bool) 
 }
 
 // BuildPalette returns Ctrl+K root commands in registration order.
-func (r *CommandRegistry) BuildPalette(ctx CommandContext) []palette.PaletteCommand {
+func (r *CommandRegistry) BuildPalette(ctx Context) []palette.PaletteCommand {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]palette.PaletteCommand, 0, len(r.cmds))
 	for _, c := range r.cmds {
-		if c.PaletteRoot == nil {
+		if c.Build == nil {
 			continue
 		}
-		out = append(out, c.PaletteRoot(ctx))
+		out = append(out, c.Build(ctx))
 	}
 	return out
 }

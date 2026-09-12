@@ -29,3 +29,6 @@ MD040: false
 
 # first-line-h1 — bilingual READMEs start with a language switcher
 MD041: false
+
+# table-column-style — project uses compact tables; pinned CI image predates this rule
+MD060: false
