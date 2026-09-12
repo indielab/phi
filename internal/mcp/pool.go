@@ -69,7 +69,7 @@ func (p *Pool) HasServers() bool {
 }
 
 // ListTools lists tools for a server (lazy connect).
-func (p *Pool) ListTools(ctx context.Context, server string) ([]ToolDef, error) {
+func (p *Pool) ListTools(ctx context.Context, server string) ([]ToolDefinition, error) {
 	c, err := p.client(server)
 	if err != nil {
 		return nil, err
@@ -78,7 +78,7 @@ func (p *Pool) ListTools(ctx context.Context, server string) ([]ToolDef, error) 
 }
 
 // Inspect returns one tool definition.
-func (p *Pool) Inspect(ctx context.Context, server, tool string) (*ToolDef, error) {
+func (p *Pool) Inspect(ctx context.Context, server, tool string) (*ToolDefinition, error) {
 	c, err := p.client(server)
 	if err != nil {
 		return nil, err

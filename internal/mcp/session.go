@@ -22,7 +22,7 @@ type session struct {
 	tr   transport
 
 	mu    sync.Mutex
-	tools []ToolDef
+	tools []ToolDefinition
 	ready bool
 }
 
@@ -56,7 +56,7 @@ func (s *session) initLocked(ctx context.Context) error {
 	return nil
 }
 
-func (s *session) ListTools(ctx context.Context) ([]ToolDef, error) {
+func (s *session) ListTools(ctx context.Context) ([]ToolDefinition, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.initLocked(ctx); err != nil {
@@ -77,7 +77,7 @@ func (s *session) ListTools(ctx context.Context) ([]ToolDef, error) {
 	return cloneTools(tools), nil
 }
 
-func (s *session) FindTool(ctx context.Context, name string) (*ToolDef, error) {
+func (s *session) FindTool(ctx context.Context, name string) (*ToolDefinition, error) {
 	tools, err := s.ListTools(ctx)
 	if err != nil {
 		return nil, err
@@ -118,8 +118,8 @@ func (s *session) Close() error {
 	return s.tr.close()
 }
 
-func cloneTools(in []ToolDef) []ToolDef {
-	out := make([]ToolDef, len(in))
+func cloneTools(in []ToolDefinition) []ToolDefinition {
+	out := make([]ToolDefinition, len(in))
 	copy(out, in)
 	return out
 }

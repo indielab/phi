@@ -11,8 +11,8 @@ const (
 	protocolVersion = "2024-11-05"
 )
 
-// ToolDef is a subset of an MCP tools/list entry.
-type ToolDef struct {
+// ToolDefinition is a subset of an MCP tools/list entry.
+type ToolDefinition struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
@@ -21,8 +21,8 @@ type ToolDef struct {
 // Client is one MCP server session (any transport).
 type Client interface {
 	Initialize(ctx context.Context) error
-	ListTools(ctx context.Context) ([]ToolDef, error)
-	FindTool(ctx context.Context, name string) (*ToolDef, error)
+	ListTools(ctx context.Context) ([]ToolDefinition, error)
+	FindTool(ctx context.Context, name string) (*ToolDefinition, error)
 	CallTool(ctx context.Context, name string, args map[string]any) (string, error)
 	Close() error
 }

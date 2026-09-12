@@ -16,7 +16,7 @@ func CompactServerList(names []string) string {
 }
 
 // CompactToolNames returns space-separated tool names.
-func CompactToolNames(tools []ToolDef) string {
+func CompactToolNames(tools []ToolDefinition) string {
 	if len(tools) == 0 {
 		return "(no tools)"
 	}
@@ -29,7 +29,7 @@ func CompactToolNames(tools []ToolDef) string {
 
 // SlimTool renders a compact one-line schema for inspect.
 // Example: echo|message:s*  — name|param:type[*required].
-func SlimTool(t ToolDef) string {
+func SlimTool(t ToolDefinition) string {
 	var b strings.Builder
 	b.WriteString(t.Name)
 	if t.Description != "" {

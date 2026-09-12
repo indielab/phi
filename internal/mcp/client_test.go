@@ -33,7 +33,7 @@ func TestConfigLoadSave(t *testing.T) {
 
 func TestCompactAndSlim(t *testing.T) {
 	require.Equal(t, "a b", mcp.CompactServerList([]string{"a", "b"}))
-	tools := []mcp.ToolDef{
+	tools := []mcp.ToolDefinition{
 		{
 			Name:        "echo",
 			Description: "Echo back",
