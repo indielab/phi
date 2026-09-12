@@ -28,23 +28,18 @@
 
 mod codec;
 mod fields;
+#[macro_use]
+mod def;
 mod msg;
 mod types;
+mod wire;
 
 pub use codec::{decode_header, encode_header, read_frame, write_frame, Error, Frame, Header};
 pub use fields::{walk_fields, FieldReader, FieldWriter, WIRE_BYTES, WIRE_U64};
 pub use msg::{
-    decode_command_invoked, decode_command_response, decode_event_notify, decode_hello,
-    decode_hello_ack, decode_host_request, decode_host_result, decode_intercept_req,
-    decode_intercept_resp, decode_notify, decode_register_command, decode_register_tool,
-    decode_session_meta, decode_subscribe, decode_tool_detail_result, decode_tool_invoke,
-    decode_tool_result, encode_command_invoked, encode_command_response, encode_event_notify,
-    encode_hello, encode_hello_ack, encode_host_request, encode_host_result, encode_intercept_req,
-    encode_intercept_resp, encode_notify, encode_register_command, encode_register_tool,
-    encode_session_meta, encode_subscribe, encode_tool_detail_result, encode_tool_invoke,
-    encode_tool_result, CommandInvoked, CommandResponse, EventNotify, Hello, HelloAck, HostRequest,
-    HostResult, InterceptReq, InterceptResp, NotifyMsg, RegisterCommand, RegisterTool, SessionMeta,
-    Subscribe, ToolDetailResult, ToolInvoke, ToolResultMsg,
+    CommandInvoked, CommandResponse, EventNotify, Hello, HelloAck, HostRequest, HostResult,
+    InterceptReq, InterceptResp, NotifyMsg, RegisterCommand, RegisterTool, SessionMeta, Subscribe,
+    ToolDetailResult, ToolInvoke, ToolResultMsg,
 };
 pub use types::{
     Event, FrameType, CAP_COMMANDS, CAP_EVENTS, CAP_INTERCEPT, CAP_TOOLS, FLAG_HAS_ID, HEADER_SIZE,

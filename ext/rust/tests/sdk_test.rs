@@ -45,18 +45,19 @@ impl Host {
     fn handshake(&mut self) -> pxb::Hello {
         let f = self.read();
         assert_eq!(f.header.typ, pxb::TYPE_HELLO);
-        let hello = pxb::decode_hello(&f.body).unwrap();
+        let hello = pxb::Hello::decode(&f.body).unwrap();
         self.write(
             pxb::TYPE_HELLO_ACK,
             0,
             0,
-            &pxb::encode_hello_ack(&pxb::HelloAck {
+            &pxb::HelloAck {
                 protocol: pxb::PROTOCOL_VERSION,
                 phi_version: "v0.0.0-test".into(),
                 cwd: "/tmp".into(),
                 session_id: "s1".into(),
                 extension_dir: "/ext".into(),
-            }),
+            }
+            .encode(),
         );
         loop {
             let f = self.read();
@@ -98,21 +99,22 @@ fn hello_extension_lifecycle() {
         pxb::TYPE_COMMAND_INVOKED,
         pxb::FLAG_HAS_ID,
         1,
-        &pxb::encode_command_invoked(&pxb::CommandInvoked {
+        &pxb::CommandInvoked {
             name: "hello".into(),
             args: "world".into(),
-        }),
+        }
+        .encode(),
     );
     let f = h.read();
     assert_eq!(f.header.typ, pxb::TYPE_NOTIFY);
-    let n = pxb::decode_notify(&f.body).unwrap();
+    let n = pxb::NotifyMsg::decode(&f.body).unwrap();
     assert_eq!((n.level.as_str(), n.message.as_str()), ("info", "Hello!"));
 
     let f = h.read();
     assert_eq!(f.header.typ, pxb::TYPE_COMMAND_RESPONSE);
     assert_eq!(f.header.flags & pxb::FLAG_HAS_ID, pxb::FLAG_HAS_ID);
     assert_eq!(f.header.id, 1);
-    let resp = pxb::decode_command_response(&f.body).unwrap();
+    let resp = pxb::CommandResponse::decode(&f.body).unwrap();
     assert!(resp.ok);
     assert!(resp.error.is_empty());
     assert!(resp.submit.is_empty());
@@ -122,40 +124,40 @@ fn hello_extension_lifecycle() {
         pxb::TYPE_INTERCEPT,
         pxb::FLAG_HAS_ID,
         2,
-        &pxb::encode_intercept_req(&pxb::InterceptReq {
+        &pxb::InterceptReq {
             event: pxb::Event::UserInput.code(),
             prompt: "hi".into(),
             ..Default::default()
-        }),
+        }
+        .encode(),
     );
     let f = h.read();
     assert_eq!(f.header.typ, pxb::TYPE_INTERCEPT_RESPONSE);
     assert_eq!(f.header.flags & pxb::FLAG_HAS_ID, pxb::FLAG_HAS_ID);
     assert_eq!(f.header.id, 2);
-    assert_eq!(
-        f.body,
-        pxb::encode_intercept_resp(&pxb::InterceptResp::default())
-    );
+    assert_eq!(f.body, pxb::InterceptResp::default().encode());
 
     // Fire-and-forget Event + SessionMeta must not break the loop.
     h.write(
         pxb::TYPE_EVENT,
         0,
         0,
-        &pxb::encode_event_notify(&pxb::EventNotify {
+        &pxb::EventNotify {
             event: pxb::Event::SessionStart.code(),
             session_id: "s9".into(),
             ..Default::default()
-        }),
+        }
+        .encode(),
     );
     h.write(
         pxb::TYPE_SESSION_META,
         0,
         0,
-        &pxb::encode_session_meta(&pxb::SessionMeta {
+        &pxb::SessionMeta {
             session_id: "s9".into(),
             cwd: "/new".into(),
-        }),
+        }
+        .encode(),
     );
 
     h.shutdown();
@@ -175,17 +177,18 @@ fn full_extension_confirm_tool_and_submit() {
         pxb::TYPE_COMMAND_INVOKED,
         pxb::FLAG_HAS_ID,
         7,
-        &pxb::encode_command_invoked(&pxb::CommandInvoked {
+        &pxb::CommandInvoked {
             name: "ask".into(),
             args: String::new(),
-        }),
+        }
+        .encode(),
     );
 
     let f = h.read();
     assert_eq!(f.header.typ, pxb::TYPE_HOST_REQUEST);
     assert_eq!(f.header.flags & pxb::FLAG_HAS_ID, pxb::FLAG_HAS_ID);
     assert_eq!(f.header.id, 1);
-    let hr = pxb::decode_host_request(&f.body).unwrap();
+    let hr = pxb::HostRequest::decode(&f.body).unwrap();
     assert_eq!(hr.method, "confirm");
     assert!(
         hr.arg.contains(r#""Title":"Confirm?""#),
@@ -200,15 +203,16 @@ fn full_extension_confirm_tool_and_submit() {
         pxb::TYPE_HOST_RESULT,
         pxb::FLAG_HAS_ID,
         1,
-        &pxb::encode_host_result(&pxb::HostResult {
+        &pxb::HostResult {
             ok: true,
             ..Default::default()
-        }),
+        }
+        .encode(),
     );
 
     let f = h.read();
     assert_eq!(f.header.typ, pxb::TYPE_NOTIFY);
-    let n = pxb::decode_notify(&f.body).unwrap();
+    let n = pxb::NotifyMsg::decode(&f.body).unwrap();
     assert_eq!(
         (n.level.as_str(), n.message.as_str()),
         ("info", "Confirmed!")
@@ -217,7 +221,7 @@ fn full_extension_confirm_tool_and_submit() {
     let f = h.read();
     assert_eq!(f.header.typ, pxb::TYPE_COMMAND_RESPONSE);
     assert_eq!(f.header.id, 7);
-    let resp = pxb::decode_command_response(&f.body).unwrap();
+    let resp = pxb::CommandResponse::decode(&f.body).unwrap();
     assert!(resp.ok);
     assert_eq!(resp.submit, "follow-up from ask");
 
@@ -226,15 +230,16 @@ fn full_extension_confirm_tool_and_submit() {
         pxb::TYPE_TOOL_INVOKE,
         pxb::FLAG_HAS_ID,
         9,
-        &pxb::encode_tool_invoke(&pxb::ToolInvoke {
+        &pxb::ToolInvoke {
             name: "echo".into(),
             args: br#"{"text":"hi"}"#.to_vec(),
-        }),
+        }
+        .encode(),
     );
     let f = h.read();
     assert_eq!(f.header.typ, pxb::TYPE_TOOL_RESULT);
     assert_eq!(f.header.id, 9);
-    let tr = pxb::decode_tool_result(&f.body).unwrap();
+    let tr = pxb::ToolResultMsg::decode(&f.body).unwrap();
     assert!(!tr.is_error);
     assert_eq!(tr.content, r#"echo: {"text":"hi"}"#);
     assert!(tr.error.is_empty());
@@ -244,15 +249,16 @@ fn full_extension_confirm_tool_and_submit() {
         pxb::TYPE_TOOL_DETAIL_INVOKE,
         pxb::FLAG_HAS_ID,
         10,
-        &pxb::encode_tool_invoke(&pxb::ToolInvoke {
+        &pxb::ToolInvoke {
             name: "echo".into(),
             args: br#"{"text":"hi"}"#.to_vec(),
-        }),
+        }
+        .encode(),
     );
     let f = h.read();
     assert_eq!(f.header.typ, pxb::TYPE_TOOL_DETAIL_RESULT);
     assert_eq!(f.header.id, 10);
-    let detail = pxb::decode_tool_detail_result(&f.body).unwrap();
+    let detail = pxb::ToolDetailResult::decode(&f.body).unwrap();
     assert_eq!(detail.detail, r#"{"text":"hi"}"#);
 
     // Async tool handler: the SDK drives the returned future to completion
@@ -261,15 +267,16 @@ fn full_extension_confirm_tool_and_submit() {
         pxb::TYPE_TOOL_INVOKE,
         pxb::FLAG_HAS_ID,
         11,
-        &pxb::encode_tool_invoke(&pxb::ToolInvoke {
+        &pxb::ToolInvoke {
             name: "async-echo".into(),
             args: br#"{"text":"yo"}"#.to_vec(),
-        }),
+        }
+        .encode(),
     );
     let f = h.read();
     assert_eq!(f.header.typ, pxb::TYPE_TOOL_RESULT);
     assert_eq!(f.header.id, 11);
-    let tr = pxb::decode_tool_result(&f.body).unwrap();
+    let tr = pxb::ToolResultMsg::decode(&f.body).unwrap();
     assert!(!tr.is_error);
     assert_eq!(tr.content, r#"async echo: {"text":"yo"}"#);
     assert!(tr.error.is_empty());

@@ -475,12 +475,13 @@ fn handshake(rd: &mut Rd, wr: &mut Wr, ext: &Extension) -> Result<HostInfo, Erro
         caps |= pxb::CAP_INTERCEPT;
     }
 
-    let hello = pxb::encode_hello(&pxb::Hello {
+    let hello = pxb::Hello {
         name: ext.name.clone(),
         version: ext.version.clone(),
         caps,
         protocol: pxb::PROTOCOL_VERSION,
-    });
+    }
+    .encode();
     pxb::write_frame(wr, pxb::TYPE_HELLO, 0, 0, &hello)?;
 
     let f = pxb::read_frame(rd)?;
@@ -490,7 +491,7 @@ fn handshake(rd: &mut Rd, wr: &mut Wr, ext: &Extension) -> Result<HostInfo, Erro
             got: f.header.typ,
         });
     }
-    let ack = pxb::decode_hello_ack(&f.body)?;
+    let ack = pxb::HelloAck::decode(&f.body)?;
     Ok(HostInfo {
         cwd: ack.cwd,
         session_id: ack.session_id,
@@ -502,29 +503,32 @@ fn handshake(rd: &mut Rd, wr: &mut Wr, ext: &Extension) -> Result<HostInfo, Erro
 /// Announces tools, commands, and subscription interest, then signals READY.
 fn register(wr: &mut Wr, ext: &Extension) -> Result<(), Error> {
     for tool in &ext.tools {
-        let body = pxb::encode_register_tool(&pxb::RegisterTool {
+        let body = pxb::RegisterTool {
             name: tool.name.clone(),
             description: tool.description.clone(),
             schema_json: tool.schema.to_json_bytes(),
             timeout_sec: tool.timeout_sec,
             has_detail: tool.detail_from_args.is_some(),
             readable: tool.readable,
-        });
+        }
+        .encode();
         pxb::write_frame(wr, pxb::TYPE_REGISTER_TOOL, 0, 0, &body)?;
     }
     for (name, cmd) in &ext.commands {
-        let body = pxb::encode_register_command(&pxb::RegisterCommand {
+        let body = pxb::RegisterCommand {
             name: name.clone(),
             description: cmd.description.clone(),
             needs_args: cmd.needs_args,
-        });
+        }
+        .encode();
         pxb::write_frame(wr, pxb::TYPE_REGISTER_COMMAND, 0, 0, &body)?;
     }
     if !ext.events.is_empty() || !ext.intercept.is_empty() {
-        let body = pxb::encode_subscribe(&pxb::Subscribe {
+        let body = pxb::Subscribe {
             events: ext.events.iter().map(|e| e.code()).collect(),
             intercept: ext.intercept.iter().map(|e| e.code()).collect(),
-        });
+        }
+        .encode();
         pxb::write_frame(wr, pxb::TYPE_SUBSCRIBE, 0, 0, &body)?;
     }
     pxb::write_frame(wr, pxb::TYPE_READY, 0, 0, &[])
@@ -545,12 +549,12 @@ fn serve(state: &mut ServeState<'_>) -> Result<(), Error> {
             pxb::FrameType::ToolDetailInvoke => serve_tool_detail(state.wr, &f, &mut state.tools)?,
             pxb::FrameType::Intercept => serve_intercept(state.wr, &f, &mut state.handlers)?,
             pxb::FrameType::Event => {
-                if let Ok(ev) = pxb::decode_event_notify(&f.body) {
+                if let Ok(ev) = pxb::EventNotify::decode(&f.body) {
                     dispatch_event(&mut state.handlers.events, ev);
                 }
             }
             pxb::FrameType::SessionMeta => {
-                if let Ok(meta) = pxb::decode_session_meta(&f.body) {
+                if let Ok(meta) = pxb::SessionMeta::decode(&f.body) {
                     apply_session_meta(&mut state.host, meta);
                 }
             }
@@ -567,7 +571,7 @@ fn serve(state: &mut ServeState<'_>) -> Result<(), Error> {
 /// the same pipe, which only works on the loop thread. Use async *tool*
 /// handlers for IO-heavy work.
 fn serve_command(state: &mut ServeState<'_>, frame: &pxb::Frame) -> Result<(), Error> {
-    let inv = pxb::decode_command_invoked(&frame.body)?;
+    let inv = pxb::CommandInvoked::decode(&frame.body)?;
     let mut resp = pxb::CommandResponse {
         ok: true,
         ..Default::default()
@@ -593,7 +597,7 @@ fn serve_command(state: &mut ServeState<'_>, frame: &pxb::Frame) -> Result<(), E
         resp.error = "unknown command".into();
     }
     resp.submit = state.pending_submit.take().unwrap_or_default();
-    let body = pxb::encode_command_response(&resp);
+    let body = resp.encode();
     pxb::write_frame(
         state.wr,
         pxb::TYPE_COMMAND_RESPONSE,
@@ -614,7 +618,7 @@ fn serve_tool(
     tools: &mut [Tool],
     rt: &tokio::runtime::Runtime,
 ) -> Result<(), Error> {
-    let inv = pxb::decode_tool_invoke(&frame.body)?;
+    let inv = pxb::ToolInvoke::decode(&frame.body)?;
     let tr = match tools.iter_mut().find(|t| t.name == inv.name) {
         Some(tool) => match rt.block_on((tool.execute)(&inv.args)) {
             Ok(res) => pxb::ToolResultMsg {
@@ -628,7 +632,7 @@ fn serve_tool(
         },
         None => tool_error("unknown tool"),
     };
-    let body = pxb::encode_tool_result(&tr);
+    let body = tr.encode();
     pxb::write_frame(
         wr,
         pxb::TYPE_TOOL_RESULT,
@@ -641,14 +645,14 @@ fn serve_tool(
 
 /// Returns a one-line TUI detail for raw tool args (or empty when unset/unknown).
 fn serve_tool_detail(wr: &mut Wr, frame: &pxb::Frame, tools: &mut [Tool]) -> Result<(), Error> {
-    let inv = pxb::decode_tool_invoke(&frame.body)?;
+    let inv = pxb::ToolInvoke::decode(&frame.body)?;
     let detail = tools
         .iter_mut()
         .find(|t| t.name == inv.name)
         .and_then(|t| t.detail_from_args.as_mut())
         .map(|f| f(&inv.args))
         .unwrap_or_default();
-    let body = pxb::encode_tool_detail_result(&pxb::ToolDetailResult { detail });
+    let body = pxb::ToolDetailResult { detail }.encode();
     pxb::write_frame(
         wr,
         pxb::TYPE_TOOL_DETAIL_RESULT,
@@ -661,9 +665,9 @@ fn serve_tool_detail(wr: &mut Wr, frame: &pxb::Frame, tools: &mut [Tool]) -> Res
 
 /// Replies to one intercept request with the registered handler's result.
 fn serve_intercept(wr: &mut Wr, frame: &pxb::Frame, handlers: &mut Handlers) -> Result<(), Error> {
-    let req = pxb::decode_intercept_req(&frame.body)?;
+    let req = pxb::InterceptReq::decode(&frame.body)?;
     let resp = handle_intercept(req, handlers);
-    let body = pxb::encode_intercept_resp(&resp);
+    let body = resp.encode();
     pxb::write_frame(
         wr,
         pxb::TYPE_INTERCEPT_RESPONSE,
@@ -839,21 +843,23 @@ impl Context<'_> {
 
     /// Pushes a toast to the host (`level`: `info` | `warning` | `error`).
     pub fn notify(&mut self, level: &str, message: &str) {
-        let body = pxb::encode_notify(&pxb::NotifyMsg {
+        let body = pxb::NotifyMsg {
             level: level.into(),
             message: message.into(),
             ..Default::default()
-        });
+        }
+        .encode();
         let _ = pxb::write_frame(self.wr, pxb::TYPE_NOTIFY, 0, 0, &body);
     }
 
     /// Updates the host footer extension status (empty text clears).
     pub fn set_status(&mut self, text: &str) {
-        let body = pxb::encode_notify(&pxb::NotifyMsg {
+        let body = pxb::NotifyMsg {
             status: text.into(),
             status_set: true,
             ..Default::default()
-        });
+        }
+        .encode();
         let _ = pxb::write_frame(self.wr, pxb::TYPE_NOTIFY, 0, 0, &body);
     }
 
@@ -869,10 +875,11 @@ impl Context<'_> {
         if text.is_empty() {
             return;
         }
-        let body = pxb::encode_host_request(&pxb::HostRequest {
+        let body = pxb::HostRequest {
             method: "send_user_message".into(),
             arg: text.into(),
-        });
+        }
+        .encode();
         let _ = pxb::write_frame(self.wr, pxb::TYPE_HOST_REQUEST, 0, 0, &body);
     }
 
@@ -907,10 +914,11 @@ impl Context<'_> {
     fn send_host_request(&mut self, method: &str, arg: &str) -> Option<u32> {
         *self.next_host_id = self.next_host_id.wrapping_add(1);
         let id = *self.next_host_id;
-        let body = pxb::encode_host_request(&pxb::HostRequest {
+        let body = pxb::HostRequest {
             method: method.into(),
             arg: arg.into(),
-        });
+        }
+        .encode();
         if pxb::write_frame(self.wr, pxb::TYPE_HOST_REQUEST, pxb::FLAG_HAS_ID, id, &body).is_err() {
             return None;
         }
@@ -926,19 +934,19 @@ impl Context<'_> {
                 if f.header.flags & pxb::FLAG_HAS_ID == 0 || f.header.id != want_id {
                     return None;
                 }
-                let Ok(res) = pxb::decode_host_result(&f.body) else {
+                let Ok(res) = pxb::HostResult::decode(&f.body) else {
                     return Some(ConfirmReply::default());
                 };
                 Some(ConfirmReply { ok: res.ok })
             }
             pxb::FrameType::SessionMeta => {
-                if let Ok(meta) = pxb::decode_session_meta(&f.body) {
+                if let Ok(meta) = pxb::SessionMeta::decode(&f.body) {
                     apply_session_meta(self.host, meta);
                 }
                 None
             }
             pxb::FrameType::Event => {
-                if let Ok(ev) = pxb::decode_event_notify(&f.body) {
+                if let Ok(ev) = pxb::EventNotify::decode(&f.body) {
                     dispatch_event(self.events, ev);
                 }
                 None
