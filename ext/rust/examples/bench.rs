@@ -26,13 +26,14 @@ fn main() {
     let iters = 2_000_000usize;
 
     bench("encode+decode Hello (small)", iters, || {
-        let b = pxb::encode_hello(&pxb::Hello {
+        let b = pxb::Hello {
             name: "greet".into(),
             version: "1.0.0".into(),
             caps: 3,
             protocol: 1,
-        });
-        std::hint::black_box(pxb::decode_hello(&b).unwrap());
+        }
+        .encode();
+        std::hint::black_box(pxb::Hello::decode(&b).unwrap());
     });
 
     let req = pxb::InterceptReq {
@@ -43,11 +44,11 @@ fn main() {
         turn_index: 3,
         ..Default::default()
     };
-    let frame = pxb::encode_intercept_req(&req);
+    let frame = req.encode();
     println!("\nInterceptReq payload: {} bytes", frame.len());
     bench("encode+decode InterceptReq (tool_call)", iters, || {
-        let b = pxb::encode_intercept_req(&req);
-        let d = pxb::decode_intercept_req(&b).unwrap();
+        let b = req.encode();
+        let d = pxb::InterceptReq::decode(&b).unwrap();
         std::hint::black_box(d.tool_call_id);
     });
 
@@ -60,11 +61,11 @@ fn main() {
         session_id: "sess_01JX".into(),
         ..Default::default()
     };
-    let frame = pxb::encode_event_notify(&ev);
+    let frame = ev.encode();
     println!("EventNotify payload: {} bytes", frame.len());
     bench("encode+decode EventNotify (tool_result)", iters, || {
-        let b = pxb::encode_event_notify(&ev);
-        let d = pxb::decode_event_notify(&b).unwrap();
+        let b = ev.encode();
+        let d = pxb::EventNotify::decode(&b).unwrap();
         std::hint::black_box(d.session_id);
     });
 
