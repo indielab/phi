@@ -164,6 +164,18 @@ User Enter in composer
 
 `Submitter` clears composer input after slash/bash; agent submit passes pending skills from composer.
 
+User `!` commands are also appended to `history.jsonl` in the project's existing
+session directory (`~/.phi/session/<encoded-cwd>/`). All sessions for that workspace
+share the file; agent tool commands are excluded. Each JSONL record contains format
+version `v`, start time `at` (Unix milliseconds), working directory `cwd`, command
+`cmd`, and nullable exit status `exit`. Failed and cancelled attempts are retained;
+unknown exit status is `null`. Shell output is not stored in this history.
+
+The `internal/session/shellhist` store reads a bounded tail and caches records, refreshing
+from appended bytes and reloading after replacement or truncation. History files
+are excluded from the session picker. This storage does not itself enable Jev
+completion in the composer.
+
 ### 2. Stream and transcript
 
 ```text
