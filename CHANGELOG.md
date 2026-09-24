@@ -10,6 +10,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- `internal/optimizer/suggest`: history-based command completion with prefix
+  filtering and Jev candidate ranking plus a separate completion-confidence
+  judgement. A single prefix match skips the model call; fuzzy suggestions must
+  pass confidence thresholds. Composer integration is not yet wired.
+- User `!` shell commands now share persistent history across sessions in the same
+  project, including start time, working directory, and known exit status.
+  Failed and canceled attempts are recorded; history write failures show a warning.
+
 ### Changed
 
 ### Deprecated
