@@ -14,6 +14,7 @@ import (
 	"github.com/pulseaiclub/phi/internal/components/palette"
 	"github.com/pulseaiclub/phi/internal/components/toast"
 	"github.com/pulseaiclub/phi/internal/session"
+	"github.com/pulseaiclub/phi/internal/session/shellhist"
 	"github.com/pulseaiclub/phi/internal/tui/codepane"
 	"github.com/pulseaiclub/phi/internal/tui/commands"
 	"github.com/pulseaiclub/phi/internal/tui/composer"
@@ -81,6 +82,14 @@ func NewEditor(
 		toast:    toast.Toast{Theme: theme},
 		composer: composer.NewComposerPane(theme, modelLabel, cwd),
 		footer:   footer.NewFooterChrome(theme, contextWindow),
+	}
+	// The "!" picker is inert unless a judge is configured: without an API key
+	// the composer behaves exactly as before. History and judge failures are
+	// startup noise, not fatal — the picker just stays closed.
+	if suggester, err := composer.NewJevSuggester(); err == nil {
+		e.composer.SetBashPredictor(composer.NewBashHistoryPredictor(
+			shellhist.New(ctrl.SessionDir()), suggester,
+		))
 	}
 	e.transcript = transcript.NewTranscriptPane(theme, e.footer.Spinner(), "Phi "+version.Version)
 	e.transcript.SetUsageCallback(e.footer.UpdateTokenDisplay)
@@ -236,6 +245,8 @@ func (e *Editor) Update(m controller.Msg) {
 		e.submitter.Cancel()
 	case controller.MentionResultsMsg:
 		e.composer.ApplyMentionResults(msg)
+	case controller.BashSuggestionsMsg:
+		e.composer.ApplyBashSuggestions(msg)
 	case controller.OverlayMsg:
 		e.overlays.Apply(msg)
 	case controller.FooterMsg:
