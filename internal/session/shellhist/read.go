@@ -24,13 +24,24 @@ type fileCache struct {
 func (s *Store) Read() ([]Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Rotation must not split the current and backup loads across generations.
-	// A read-only descriptor also supports histories whose existing lock is read-only.
-	// #nosec G703 -- Fixed filename under the caller's canonical sessions directory.
-	lock, err := os.OpenFile(filepath.Join(s.dir, "history.lock"), os.O_CREATE|os.O_RDONLY, 0o600)
+	info, err := os.Stat(s.dir)
 	if os.IsNotExist(err) {
 		s.current, s.backup = fileCache{}, fileCache{}
 		return []Entry{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("inspect shell history directory for reading: %w", err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("open shell history lock for reading: %s is not a directory", s.dir)
+	}
+	// Rotation must not split the current and backup loads across generations.
+	// Windows rejects O_CREATE on an existing read-only file, even with O_RDONLY.
+	path := filepath.Join(s.dir, "history.lock")
+	lock, err := os.Open(path)
+	if os.IsNotExist(err) {
+		// #nosec G703 -- Fixed filename under the caller's canonical sessions directory.
+		lock, err = os.OpenFile(path, os.O_CREATE|os.O_RDONLY, 0o600)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("open shell history lock for reading: %w", err)
