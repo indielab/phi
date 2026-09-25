@@ -14,6 +14,7 @@ import (
 	"github.com/pulseaiclub/phi/internal/components/palette"
 	"github.com/pulseaiclub/phi/internal/components/toast"
 	"github.com/pulseaiclub/phi/internal/debuglog"
+	"github.com/pulseaiclub/phi/internal/optimizer"
 	"github.com/pulseaiclub/phi/internal/session"
 	"github.com/pulseaiclub/phi/internal/session/shellhist"
 	"github.com/pulseaiclub/phi/internal/tui/codepane"
@@ -84,12 +85,12 @@ func NewEditor(
 		composer: composer.NewComposerPane(theme, modelLabel, cwd),
 		footer:   footer.NewFooterChrome(theme, contextWindow),
 	}
-	// The "!" picker is inert unless the feature is enabled and a session
-	// directory is available: without either, the composer behaves exactly as
-	// before. ShellCompletionEnabled covers the missing-credentials case, so what
-	// is left here is startup noise, not fatal — the picker stays closed, so it is
-	// logged rather than surfaced.
-	if ctrl != nil && ctrl.SessionDir() != "" && composer.ShellCompletionEnabled() {
+	// The "!" picker is inert unless optimizer features are available and a
+	// session directory exists: without either, the composer behaves exactly as
+	// before. Available() covers both the switch and the missing-credentials case,
+	// so what is left here is startup noise, not fatal — the picker stays closed,
+	// so it is logged rather than surfaced.
+	if ctrl != nil && ctrl.SessionDir() != "" && optimizer.Available() {
 		suggester, err := composer.NewJevSuggester()
 		if err != nil {
 			debuglog.Logf("composer: ! completions disabled: %v", err)
