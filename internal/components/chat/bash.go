@@ -1,13 +1,14 @@
 package chat
 
 // ActiveBash reports whether the cursor sits in the command text of a "!" shell
-// line. start/end are byte offsets into value for the range to replace on
-// accept — the command after "!" up to the cursor — and query is that text.
+// line. start is the byte offset of the command text — just after the bang — so
+// an accept can replace the command without touching the bang or the whitespace
+// before it, and query is the text between start and the cursor.
 //
 // "!" mode owns the whole line, so the command may be empty (the user has typed
 // only the bang) and may span several lines; how short is too short to complete
 // is the predictor's call, not this one's.
-func ActiveBash(value string, cursor int) (query string, start, end int, ok bool) {
+func ActiveBash(value string, cursor int) (query string, start int, ok bool) {
 	if cursor < 0 {
 		cursor = 0
 	}
@@ -21,13 +22,13 @@ func ActiveBash(value string, cursor int) (query string, start, end int, ok bool
 		bang++
 	}
 	if bang >= len(value) || value[bang] != '!' {
-		return "", 0, 0, false
+		return "", 0, false
 	}
 	start = bang + 1
 	if cursor < start {
-		return "", 0, 0, false
+		return "", 0, false
 	}
-	return value[start:cursor], start, cursor, true
+	return value[start:cursor], start, true
 }
 
 // isBashSpace reports whether b is whitespace the submitter would trim before

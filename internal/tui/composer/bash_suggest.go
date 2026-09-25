@@ -77,13 +77,15 @@ func (c *ComposerPane) onBashChange(active bool, query string) {
 		return
 	}
 
-	c.showBashPicker()
 	// A ranking is only meaningful for the text it was computed for, so rows
 	// from the previous query are dropped rather than shown against new text:
 	// a score list that silently belongs to other text is worse than a blank
 	// list for the round trip it takes to replace it.
 	c.bash.Items = nil
 	c.bash.Status = "Asking Jev…"
+	// Show after the rows are gone, so the key claim matches the list: an open
+	// picker with nothing in it must not swallow Enter.
+	c.showBashPicker()
 	c.scheduleBashSuggest(query)
 }
 
@@ -102,7 +104,7 @@ func (c *ComposerPane) bashRowIsTypedText() bool {
 	if c.bash.Selected < 0 || c.bash.Selected >= len(c.bash.Items) {
 		return false
 	}
-	query, _, _, ok := chat.ActiveBash(c.Chat.Value, c.Chat.Cursor)
+	query, _, ok := chat.ActiveBash(c.Chat.Value, c.Chat.Cursor)
 	if !ok {
 		return false
 	}
@@ -184,11 +186,14 @@ func (c *ComposerPane) ApplyBashSuggestions(msg controller.BashSuggestionsMsg) {
 	// The buffer may have moved on without a new prediction being scheduled
 	// (a cursor move, say): showing this ranking would suggest the wrong
 	// completion for what is on screen.
-	if query, _, _, ok := chat.ActiveBash(c.Chat.Value, c.Chat.Cursor); !ok || query != msg.Query {
+	if query, _, ok := chat.ActiveBash(c.Chat.Value, c.Chat.Cursor); !ok || query != msg.Query {
 		return
 	}
 	if msg.ErrText != "" {
+		// The picker stays up to say why, but with no rows it must not hold the
+		// navigation keys: Enter still has to run what the user typed.
 		c.bash.SetResults(nil, msg.ErrText)
+		c.Chat.BashOpen = false
 		return
 	}
 	if len(msg.Items) == 0 {
@@ -246,7 +251,7 @@ func (c *ComposerPane) acceptBash(item mention.Item) {
 // command, so replacing only up to the cursor would splice the accepted command
 // into the middle of the typed one.
 func (c *ComposerPane) bashReplaceRange() (start, end int) {
-	if _, start, _, ok := chat.ActiveBash(c.Chat.Value, c.Chat.Cursor); ok {
+	if _, start, ok := chat.ActiveBash(c.Chat.Value, c.Chat.Cursor); ok {
 		return start, len(c.Chat.Value)
 	}
 	return c.Chat.Cursor, c.Chat.Cursor

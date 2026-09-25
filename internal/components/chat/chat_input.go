@@ -543,7 +543,7 @@ func (c *ChatInput) notifyBash() {
 	if c.OnBashChange == nil {
 		return
 	}
-	q, _, _, ok := ActiveBash(c.Value, c.Cursor)
+	q, _, ok := ActiveBash(c.Value, c.Cursor)
 	c.OnBashChange(ok, q)
 }
 

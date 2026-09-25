@@ -13,6 +13,7 @@ import (
 	"github.com/pulseaiclub/phi/internal/components/chat"
 	"github.com/pulseaiclub/phi/internal/components/palette"
 	"github.com/pulseaiclub/phi/internal/components/toast"
+	"github.com/pulseaiclub/phi/internal/debuglog"
 	"github.com/pulseaiclub/phi/internal/session"
 	"github.com/pulseaiclub/phi/internal/session/shellhist"
 	"github.com/pulseaiclub/phi/internal/tui/codepane"
@@ -83,13 +84,19 @@ func NewEditor(
 		composer: composer.NewComposerPane(theme, modelLabel, cwd),
 		footer:   footer.NewFooterChrome(theme, contextWindow),
 	}
-	// The "!" picker is inert unless a judge is configured: without an API key
-	// the composer behaves exactly as before. History and judge failures are
-	// startup noise, not fatal — the picker just stays closed.
-	if suggester, err := composer.NewJevSuggester(); err == nil {
-		e.composer.SetBashPredictor(composer.NewBashHistoryPredictor(
-			shellhist.New(ctrl.SessionDir()), suggester,
-		))
+	// The "!" picker is inert unless a judge and a session directory are both
+	// available: without either, the composer behaves exactly as before. Judge
+	// setup failures are startup noise, not fatal — the picker stays closed, so
+	// they are logged rather than surfaced.
+	if ctrl != nil && ctrl.SessionDir() != "" {
+		suggester, err := composer.NewJevSuggester()
+		if err != nil {
+			debuglog.Logf("composer: ! completions disabled: %v", err)
+		} else {
+			e.composer.SetBashPredictor(composer.NewBashHistoryPredictor(
+				shellhist.New(ctrl.SessionDir()), suggester,
+			))
+		}
 	}
 	e.transcript = transcript.NewTranscriptPane(theme, e.footer.Spinner(), "Phi "+version.Version)
 	e.transcript.SetUsageCallback(e.footer.UpdateTokenDisplay)

@@ -172,6 +172,7 @@ func TestNewQueryDropsThePreviousRanking(t *testing.T) {
 
 	assert.Empty(t, c.bash.Items, "a ranking for other text must not be shown")
 	assert.Equal(t, "Asking Jev…", c.bash.Status)
+	assert.False(t, c.Chat.BashOpen, "the dropped rows give the keys back while the rerank runs")
 }
 
 func TestBashSuggestionsAreDroppedWhenTheRequestWasCancelled(t *testing.T) {
@@ -385,6 +386,76 @@ func TestNavigationKeysStayWithTheComposerUntilThereAreRows(t *testing.T) {
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyUp, Press: true})
 
 	assert.Less(t, c.Chat.Cursor, len(c.Chat.Value), "Up moved the cursor inside the command")
+}
+
+// Typing on drops the rows of the previous query while the new ranking is in
+// flight. The picker is still up, but with nothing to navigate it has to hand
+// Enter back: otherwise the keystroke after every ranking would need two of
+// them to run the command.
+func TestEnterRunsTheCommandWhileARerankIsInFlight(t *testing.T) {
+	c, bus := wiredComposer(t)
+	c.SetBashPredictor(&fakeBashPredictor{items: []controller.BashSuggestion{{Command: "git stash", Score: 0.9}}})
+	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
+	c.onBashChange(true, "git s")
+	c.ApplyBashSuggestions(drainBash(t, bus))
+	require.True(t, c.Chat.BashOpen)
+
+	c.SetBashPredictor(&fakeBashPredictor{cancelErr: errors.New("still thinking")})
+	pressKey(t, c, xui.KeyEvent{Code: xui.KeyRune, Rune: 't', Press: true})
+	require.True(t, c.bash.Open, "the picker stays up while it asks")
+	require.Empty(t, c.bash.Items)
+	require.False(t, c.Chat.BashOpen, "no rows means no key claim")
+
+	pressKey(t, c, xui.KeyEvent{Code: xui.KeyEnter, Press: true})
+
+	assert.Equal(t, "!git st", submittedText(t, bus), "Enter runs what the user typed")
+	c.hideBashSuggestions()
+}
+
+// A failed judgement leaves a message where the rows were. The message is not
+// something to navigate, so Enter still has to run the typed command.
+func TestEnterRunsTheCommandAfterAFailedRanking(t *testing.T) {
+	c, bus := wiredComposer(t)
+	c.SetBashPredictor(&fakeBashPredictor{items: []controller.BashSuggestion{{Command: "git stash", Score: 0.9}}})
+	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
+	c.onBashChange(true, "git s")
+	c.ApplyBashSuggestions(drainBash(t, bus))
+	require.True(t, c.Chat.BashOpen)
+
+	c.ApplyBashSuggestions(controller.BashSuggestionsMsg{
+		Gen:     c.bashGen,
+		Query:   "git s",
+		ErrText: "Completions unavailable",
+	})
+
+	assert.Equal(t, "Completions unavailable", c.bash.Status)
+	assert.False(t, c.Chat.BashOpen, "a status row is not a row to navigate")
+
+	pressKey(t, c, xui.KeyEvent{Code: xui.KeyEnter, Press: true})
+
+	assert.Equal(t, "!git s", submittedText(t, bus))
+}
+
+// The judge ranks a list, so Down walks it and Tab completes the row it landed
+// on — never runs it.
+func TestBashPickerNavigatesTheRankedRows(t *testing.T) {
+	c, bus := wiredComposer(t)
+	c.SetBashPredictor(&fakeBashPredictor{items: []controller.BashSuggestion{
+		{Command: "git stash", Score: 0.8, IsPrefix: true},
+		{Command: "git status", Score: 0.5, IsPrefix: true},
+	}})
+	c.Chat.Value, c.Chat.Cursor = "!git st", len("!git st")
+	c.onBashChange(true, "git st")
+	c.ApplyBashSuggestions(drainBash(t, bus))
+	require.Len(t, c.bash.Items, 2)
+
+	pressKey(t, c, xui.KeyEvent{Code: xui.KeyDown, Press: true})
+	require.Equal(t, 1, c.bash.Selected, "Down walks the ranking")
+
+	pressKey(t, c, xui.KeyEvent{Code: xui.KeyTab, Press: true})
+
+	assert.Equal(t, "!git status", c.Chat.Value, "Tab completes the highlighted row")
+	assert.Empty(t, submittedText(t, bus), "Tab never runs a command")
 }
 
 func TestSetThemeRestylesTheBashPicker(t *testing.T) {

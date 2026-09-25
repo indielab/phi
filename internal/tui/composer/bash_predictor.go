@@ -20,9 +20,9 @@ type BashHistoryPredictor struct {
 }
 
 // NewBashHistoryPredictor combines a project history store with a Jev-backed
-// suggester. backend may be nil for tests, but Suggest would then fail; the
-// composer treats a predictor failure as "no completions" rather than an error
-// surfaced to the user.
+// suggester. A nil store or suggester leaves the predictor inert: Predict then
+// reports no completions instead of panicking, so a caller can install it
+// unconditionally.
 func NewBashHistoryPredictor(store *shellhist.Store, suggester *suggest.Suggester) *BashHistoryPredictor {
 	return &BashHistoryPredictor{store: store, suggester: suggester}
 }
@@ -46,6 +46,9 @@ func NewJevSuggester() (*suggest.Suggester, error) {
 // unreadable history is an empty one: completions degrade to Jev-less silence
 // instead of reporting an error the user cannot act on.
 func (p *BashHistoryPredictor) Predict(ctx context.Context, typed string) ([]controller.BashSuggestion, error) {
+	if p == nil || p.store == nil || p.suggester == nil {
+		return nil, nil
+	}
 	history, err := p.store.Commands()
 	if err != nil {
 		history = nil
@@ -54,13 +57,19 @@ func (p *BashHistoryPredictor) Predict(ctx context.Context, typed string) ([]con
 	if err != nil {
 		return nil, err
 	}
-	suggestion, ok := p.suggester.Pick(result)
-	if !ok {
+	// The picker lists a ranking, not one answer: the judge already ordered the
+	// candidates and Shortlist decides which of them cleared the gates.
+	ranked := p.suggester.Shortlist(result, bashSuggestVisible)
+	if len(ranked) == 0 {
 		return nil, nil
 	}
-	return []controller.BashSuggestion{{
-		Command:  suggestion.Command,
-		Score:    suggestion.Score,
-		IsPrefix: suggestion.IsPrefix,
-	}}, nil
+	items := make([]controller.BashSuggestion, 0, len(ranked))
+	for _, suggestion := range ranked {
+		items = append(items, controller.BashSuggestion{
+			Command:  suggestion.Command,
+			Score:    suggestion.Score,
+			IsPrefix: suggestion.IsPrefix,
+		})
+	}
+	return items, nil
 }

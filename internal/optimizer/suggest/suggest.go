@@ -267,6 +267,42 @@ func PickSuggestion(result Result, gates Gates) (Suggestion, bool) {
 	return Suggestion{}, false
 }
 
+// Shortlist returns the rows to show for one result under the gates this
+// suggester was configured with: the candidates worth listing, best first, at
+// most limit of them. It returns nothing when the ranking does not clear the
+// gates, so a caller never lists a guess the judge was not confident about.
+//
+// Prefix mode lists every candidate, since each one literally completes the
+// typed text. Fuzzy mode drops the rows below MinScore: the top row already
+// cleared that floor, and a tail of near-zero guesses is noise around it.
+func (s *Suggester) Shortlist(result Result, limit int) []Suggestion {
+	if s == nil {
+		return ShortlistSuggestions(result, DefaultGates, limit)
+	}
+	return ShortlistSuggestions(result, s.gates, limit)
+}
+
+// ShortlistSuggestions is Shortlist with explicit gates.
+func ShortlistSuggestions(result Result, gates Gates, limit int) []Suggestion {
+	if limit < 1 || len(result.Ranked) == 0 {
+		return nil
+	}
+	if _, ok := PickSuggestion(result, gates); !ok {
+		return nil
+	}
+	rows := make([]Suggestion, 0, min(limit, len(result.Ranked)))
+	for _, suggestion := range result.Ranked {
+		if result.Mode != ModePrefix && suggestion.Score < gates.MinScore {
+			break // Ranked is sorted, so everything after this is weaker too.
+		}
+		rows = append(rows, suggestion)
+		if len(rows) == limit {
+			break
+		}
+	}
+	return rows
+}
+
 // recent returns the most recent limit distinct commands, newest first.
 // Duplicates keep their most recent position, matching what HIST_IGNORE_ALL_DUPS
 // would show.

@@ -7,37 +7,35 @@ import (
 )
 
 func TestActiveBashReadsTheCommandBeforeTheCursor(t *testing.T) {
-	query, start, end, ok := ActiveBash("!git st", len("!git st"))
+	query, start, ok := ActiveBash("!git st", len("!git st"))
 
 	assert.True(t, ok)
 	assert.Equal(t, "git st", query)
 	assert.Equal(t, 1, start)
-	assert.Equal(t, len("!git st"), end)
 }
 
 func TestActiveBashAllowsLeadingWhitespaceBeforeTheBang(t *testing.T) {
-	query, _, _, ok := ActiveBash("  !ls", len("  !ls"))
+	query, start, ok := ActiveBash("  !ls", len("  !ls"))
 
 	assert.True(t, ok)
 	assert.Equal(t, "ls", query)
+	assert.Equal(t, 3, start, "start points after the bang, past the leading whitespace")
 }
 
 func TestActiveBashAcceptsAnEmptyCommand(t *testing.T) {
-	query, start, end, ok := ActiveBash("!", 1)
+	query, start, ok := ActiveBash("!", 1)
 
 	assert.True(t, ok, "a bare bang is still ! mode: the predictor decides what to do")
-	assert.Equal(t, "", query)
+	assert.Empty(t, query)
 	assert.Equal(t, 1, start)
-	assert.Equal(t, 1, end)
 }
 
 func TestActiveBashReadsAMidCommandCursor(t *testing.T) {
-	query, start, end, ok := ActiveBash("!git status", 4)
+	query, start, ok := ActiveBash("!git status", 4)
 
 	assert.True(t, ok)
 	assert.Equal(t, "git", query)
 	assert.Equal(t, 1, start)
-	assert.Equal(t, 4, end)
 }
 
 func TestActiveBashRejectsNonBashLines(t *testing.T) {
@@ -54,14 +52,14 @@ func TestActiveBashRejectsNonBashLines(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, _, ok := ActiveBash(tt.value, tt.cursor)
+			_, _, ok := ActiveBash(tt.value, tt.cursor)
 			assert.False(t, ok)
 		})
 	}
 }
 
 func TestActiveBashClampsAnOutOfRangeCursor(t *testing.T) {
-	query, _, _, ok := ActiveBash("!ls", 99)
+	query, _, ok := ActiveBash("!ls", 99)
 
 	assert.True(t, ok, "an oversized cursor is clamped, not rejected")
 	assert.Equal(t, "ls", query)
@@ -69,9 +67,9 @@ func TestActiveBashClampsAnOutOfRangeCursor(t *testing.T) {
 
 func TestActiveBashSpansMultipleLines(t *testing.T) {
 	value := "!for f in *; do\n  echo $f\ndone"
-	query, _, end, ok := ActiveBash(value, len(value))
+	query, start, ok := ActiveBash(value, len(value))
 
 	assert.True(t, ok)
 	assert.Equal(t, "for f in *; do\n  echo $f\ndone", query)
-	assert.Equal(t, len(value), end)
+	assert.Equal(t, 1, start)
 }

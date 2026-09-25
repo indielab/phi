@@ -31,7 +31,8 @@ import (
 	imgutil "github.com/pulseaiclub/phi/internal/util/image"
 )
 
-// ComposerPane owns the chat input, slash/@ pickers, palette, and session list.
+// ComposerPane owns the chat input, its completer pickers (/, ?, @, !), the
+// palette, and the session list.
 type ComposerPane struct {
 	theme components.Theme
 	cwd   string
@@ -49,7 +50,7 @@ type ComposerPane struct {
 	mentionGen int
 	// mentionCancel stops the search in flight; nil before the first search.
 	mentionCancel context.CancelFunc
-	commands *commands.CommandRegistry
+	commands      *commands.CommandRegistry
 
 	// bashPredict ranks "!" completions. nil disables the picker entirely, so a
 	// session without a judge keeps the composer exactly as it was.
@@ -549,7 +550,7 @@ func (c *ComposerPane) DrawChat(ctx components.DrawContext, width, height int) c
 	)
 }
 
-// PickerOverlays returns slash and @ picker surfaces anchored above the composer.
+// PickerOverlays returns the completer surfaces anchored above the composer.
 func (c *ComposerPane) PickerOverlays(ctx components.DrawContext, listH, width int) []components.SubSurface {
 	if c == nil {
 		return nil
