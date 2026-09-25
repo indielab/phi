@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -121,12 +122,7 @@ func Search(ctx context.Context, cwd, query string, limit int) (paths []string, 
 		if line == "" || line == "." {
 			continue
 		}
-		// fd echoes the root it was given, so strip it back to a path
-		// relative to cwd.
-		line = strings.TrimPrefix(line, cwd)
-		line = strings.TrimPrefix(line, string(os.PathSeparator))
-		line = strings.TrimPrefix(line, "./")
-		line = filepath.ToSlash(line)
+		line = relFromRoot(cwd, line)
 		if line == "" {
 			continue
 		}
@@ -137,6 +133,28 @@ func Search(ctx context.Context, cwd, query string, limit int) (paths []string, 
 		}
 	}
 	return out, false, nil
+}
+
+// relFromRoot turns one fd output line into a slash-separated path relative to
+// root. fd echoes the root it was given, but not always with the separators phi
+// passed: under MSYS2/Git Bash on Windows it prints forward slashes while cwd
+// (from os.Getwd) keeps backslashes, so a raw prefix compare misses and leaks an
+// absolute path into the @ picker. Windows paths also compare case-insensitively.
+// A line that is not a child of root is returned unchanged, so a sibling such as
+// /repo2 is not mistaken for /repo.
+func relFromRoot(root, line string) string {
+	line = filepath.ToSlash(line)
+	root = filepath.ToSlash(root)
+
+	rest, ok := strings.CutPrefix(line, root)
+	if !ok && runtime.GOOS == "windows" && len(line) >= len(root) && strings.EqualFold(line[:len(root)], root) {
+		rest, ok = line[len(root):], true
+	}
+	if !ok || (rest != "" && !strings.HasPrefix(rest, "/")) {
+		return line
+	}
+	rest = strings.TrimPrefix(rest, "/")
+	return strings.TrimPrefix(rest, "./")
 }
 
 func escapeRegex(s string) string {

@@ -18,6 +18,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- `@` file search on Windows under MSYS2/Git Bash no longer inserts absolute
+  paths: `fd` prints forward slashes there while the cwd keeps backslashes, so
+  the root prefix is now normalized (and compared case-insensitively) before it
+  is stripped.
+
 ### Security
 
 ## [0.27.5] - 2026-09-22

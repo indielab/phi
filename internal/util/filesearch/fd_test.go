@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -156,4 +157,32 @@ func TestSearchMatchesDirectorySegment(t *testing.T) {
 	got, _, err := Search(t.Context(), dir, "session", 20)
 	require.NoError(t, err)
 	require.Equal(t, []string{"internal/session/manager.go"}, got)
+}
+
+// fd echoes the absolute root it was given, so one prefix cut must turn its
+// output into a path relative to that root. Anything else stays absolute.
+func TestRelFromRoot(t *testing.T) {
+	for _, tc := range []struct{ line, want string }{
+		{"/repo/a/b.go", "a/b.go"},
+		{"/repo/sub/deep.go", "sub/deep.go"},
+		{"/repo", ""},
+		{"/repo2/a.go", "/repo2/a.go"},
+		{"/other/a.go", "/other/a.go"},
+		{"a/b.go", "a/b.go"},
+	} {
+		assert.Equal(t, tc.want, relFromRoot("/repo", tc.line), "line %q", tc.line)
+	}
+}
+
+// Under MSYS2/Git Bash, fd prints forward slashes while cwd keeps backslashes,
+// so a raw prefix compare misses and the picker gets an absolute path. Windows
+// paths are also case-insensitive, which the drive letter exercises.
+func TestRelFromRootWindowsSeparators(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows path semantics")
+	}
+
+	assert.Equal(t, "sub/a.go", relFromRoot(`C:\repo`, "C:/repo/sub/a.go"))
+	assert.Equal(t, "sub/a.go", relFromRoot(`c:\repo`, `C:\repo\sub\a.go`))
+	assert.Equal(t, "D:/work/a.go", relFromRoot(`C:\repo`, `D:\work\a.go`))
 }
