@@ -84,11 +84,12 @@ func NewEditor(
 		composer: composer.NewComposerPane(theme, modelLabel, cwd),
 		footer:   footer.NewFooterChrome(theme, contextWindow),
 	}
-	// The "!" picker is inert unless a judge and a session directory are both
-	// available: without either, the composer behaves exactly as before. Judge
-	// setup failures are startup noise, not fatal — the picker stays closed, so
-	// they are logged rather than surfaced.
-	if ctrl != nil && ctrl.SessionDir() != "" {
+	// The "!" picker is inert unless the feature is enabled and a session
+	// directory is available: without either, the composer behaves exactly as
+	// before. ShellCompletionEnabled covers the missing-credentials case, so what
+	// is left here is startup noise, not fatal — the picker stays closed, so it is
+	// logged rather than surfaced.
+	if ctrl != nil && ctrl.SessionDir() != "" && composer.ShellCompletionEnabled() {
 		suggester, err := composer.NewJevSuggester()
 		if err != nil {
 			debuglog.Logf("composer: ! completions disabled: %v", err)

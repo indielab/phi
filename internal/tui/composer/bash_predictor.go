@@ -2,6 +2,8 @@ package composer
 
 import (
 	"context"
+	"os"
+	"strings"
 
 	"github.com/pulseaiclub/phi/internal/llm/jev"
 	"github.com/pulseaiclub/phi/internal/optimizer"
@@ -25,6 +27,23 @@ type BashHistoryPredictor struct {
 // unconditionally.
 func NewBashHistoryPredictor(store *shellhist.Store, suggester *suggest.Suggester) *BashHistoryPredictor {
 	return &BashHistoryPredictor{store: store, suggester: suggester}
+}
+
+// envShellCompletion turns the "!" picker off outright: PHI_SHELL_COMPLETION=off
+// keeps the composer on its pre-completion behavior even where credentials
+// exist.
+const envShellCompletion = "PHI_SHELL_COMPLETION"
+
+// ShellCompletionEnabled reports whether "!" completions may be wired up at all:
+// the feature flag is on and a TypeSafe API key is configured. Ranking
+// candidates is a judgement call, so with no key there is no judge to consult
+// and the feature stays off rather than showing a picker that can never fill.
+func ShellCompletionEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(envShellCompletion))) {
+	case "0", "false", "off", "no":
+		return false
+	}
+	return jev.APIKeyConfigured()
 }
 
 // NewJevSuggester builds a suggester over the TypeSafe System One backend.

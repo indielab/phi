@@ -14,7 +14,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   commands with Jev and lists the completions above the composer. Tab (or Enter on
   a row that differs from what was typed) fills the highlighted command; a single
   literal prefix match needs no judgement call. Requires `TYPESAFE_API_KEY`; without
-  a judge the picker stays closed.
+  a judge the picker stays closed, and `PHI_SHELL_COMPLETION=off` disables the
+  feature even with a key configured.
 - `internal/optimizer/suggest`: history-based command completion with prefix
   filtering and Jev candidate ranking plus a separate completion-confidence
   judgement. A single prefix match skips the model call; fuzzy suggestions must

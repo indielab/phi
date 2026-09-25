@@ -180,9 +180,10 @@ ranks recent commands with Jev and lists the completions above the input. Rows a
 whole commands, so accepting one (Tab, or Enter on a row that differs from what
 was typed) replaces the command text after the bang; Enter keeps its usual meaning
 of running the command whenever the list is empty. Literal prefix matches are
-listed as such and a single one needs no judgement call. Completion requires
-`TYPESAFE_API_KEY`: without it the picker stays closed and `!` behaves as it
-always did.
+listed as such and a single one needs no judgement call. Completion is off by
+default without credentials: it requires `TYPESAFE_API_KEY`, and without it the
+picker stays closed and `!` behaves as it always did. `PHI_SHELL_COMPLETION=off`
+turns the feature off even when a key is configured.
 
 ### 2. Stream and transcript
 
