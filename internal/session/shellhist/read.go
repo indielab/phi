@@ -9,6 +9,10 @@ import (
 	"path/filepath"
 )
 
+// seamBytes is how much of the cached tail is re-read to confirm the cache still
+// describes the file, catching a truncate-and-regrow that kept the inode.
+const seamBytes = 64
+
 // Cache raw tails so growing files need only incremental I/O. A tail never exceeds
 // its budget, including incomplete and malformed records.
 type fileCache struct {
@@ -54,31 +58,55 @@ func (s *Store) Read() ([]Entry, error) {
 	if err := s.current.load(filepath.Join(s.dir, "history.jsonl"), tailBudget); err != nil {
 		return nil, err
 	}
+	entries, err := s.tailLocked()
+	if err != nil {
+		return nil, err
+	}
+	return copyEntries(entries), nil
+}
+
+// tailLocked loads the current tail and, while it is still short of maxEntries
+// and the budget allows, the backup tail in front of it. The caller holds s.mu
+// and the history.lock rotation lock, so rotation cannot move records between
+// the two loads.
+func (s *Store) tailLocked() ([]Entry, error) {
 	entries := s.current.entries
 	remaining := tailBudget - len(s.current.data)
-	if len(entries) < maxEntries && remaining > 0 {
-		if err := s.backup.load(filepath.Join(s.dir, "history.1.jsonl"), remaining); err != nil {
-			return nil, err
-		}
-		combined := make([]Entry, 0, len(s.backup.entries)+len(entries))
-		combined = append(combined, s.backup.entries...)
-		entries = append(combined, entries...)
-	} else {
+	if len(entries) >= maxEntries || remaining <= 0 {
 		s.backup = fileCache{}
+		return capTail(entries), nil
 	}
+	if err := s.backup.load(filepath.Join(s.dir, "history.1.jsonl"), remaining); err != nil {
+		return nil, err
+	}
+	// The backup holds the older records, so it goes in front of the current ones.
+	combined := make([]Entry, 0, len(s.backup.entries)+len(entries))
+	combined = append(combined, s.backup.entries...)
+	combined = append(combined, entries...)
+	return capTail(combined), nil
+}
+
+// capTail keeps the newest maxEntries entries, for a tail that may hold more.
+func capTail(entries []Entry) []Entry {
 	if len(entries) > maxEntries {
-		entries = entries[len(entries)-maxEntries:]
+		return entries[len(entries)-maxEntries:]
 	}
-	// Exit pointers must not expose mutable cache state.
-	result := make([]Entry, len(entries))
-	for i, e := range entries {
-		result[i] = e
+	return entries
+}
+
+// copyEntries detaches entries from the caches: the slice is new and no Exit
+// pointer is shared, so a caller cannot mutate cached state through the result.
+// An empty tail stays an empty slice rather than becoming nil.
+func copyEntries(entries []Entry) []Entry {
+	out := make([]Entry, len(entries))
+	copy(out, entries)
+	for i, e := range out {
 		if e.Exit != nil {
 			exit := *e.Exit
-			result[i].Exit = &exit
+			out[i].Exit = &exit
 		}
 	}
-	return result, nil
+	return out
 }
 
 // Commands returns commands in history order, including repeated commands.
@@ -116,7 +144,7 @@ func (c *fileCache) load(path string, budget int) error {
 	// A truncate-and-regrow between reads may preserve the inode and grow the file.
 	// Check the cached seam before trusting the incremental offset.
 	if reusable && len(c.data) > 0 {
-		seam := c.data[max(0, len(c.data)-64):]
+		seam := c.data[max(0, len(c.data)-seamBytes):]
 		actual := make([]byte, len(seam))
 		_, err := f.ReadAt(actual, c.info.Size()-int64(len(seam)))
 		reusable = err == nil && bytes.Equal(seam, actual)
@@ -162,8 +190,5 @@ func parseTail(data []byte, clipped bool) []Entry {
 			entries = append(entries, e)
 		}
 	}
-	if len(entries) > maxEntries {
-		entries = entries[len(entries)-maxEntries:]
-	}
-	return entries
+	return capTail(entries)
 }
