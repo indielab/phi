@@ -32,6 +32,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- Compaction summaries say that they are summaries. They re-entered the context
+  as plain user messages, so retired instructions inside one — a constraint from
+  an earlier turn, the summarizer's own next steps — read to the model as a fresh
+  request. They now arrive with a "the conversation history before this point was
+  compacted" lead-in and a `<summary>` wrapper.
+
 - `@` file search on Windows under MSYS2/Git Bash no longer inserts absolute
   paths: `fd` prints forward slashes there while the cwd keeps backslashes, so
   the root prefix is now normalized (and compared case-insensitively) before it
