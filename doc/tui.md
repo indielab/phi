@@ -182,8 +182,10 @@ was typed) replaces the command text after the bang; Enter keeps its usual meani
 of running the command whenever the list is empty. Literal prefix matches are
 listed as such and a single one needs no judgement call. Completion is off by
 default without credentials: it requires `TYPESAFE_API_KEY`, and without it the
-picker stays closed and `!` behaves as it always did. `PHI_SHELL_COMPLETION=off`
+picker stays closed and `!` behaves as it always did. `PHI_OPTIMIZER=off`
 turns the feature off even when a key is configured.
+
+**Security:** When the optimizer is enabled, command history and context are sent to an external TypeSafe service for judging and ranking. Avoid running the optimizer in environments where shell history or command text may contain sensitive information (API keys, tokens, credentials).
 
 ### 2. Stream and transcript
 
