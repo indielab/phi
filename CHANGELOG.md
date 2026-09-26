@@ -32,6 +32,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- Compaction summaries list the files touched by the turn the cut lands in. A
+  mid-turn cut summarizes the turn prefix, but its file operations were never
+  collected, so the handoff summary reported edited files as read-only (or
+  omitted them) and the resumed session could re-read or overwrite that work.
+  Read lists are deduplicated too, and the file block follows the summary after
+  a single blank line instead of two.
+
 - `@` file search on Windows under MSYS2/Git Bash no longer inserts absolute
   paths: `fd` prints forward slashes there while the cwd keeps backslashes, so
   the root prefix is now normalized (and compared case-insensitively) before it
