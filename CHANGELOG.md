@@ -32,6 +32,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- Compaction summaries say that they are summaries. They re-entered the context
+  as plain user messages, so retired instructions inside one — a constraint from
+  an earlier turn, the summarizer's own next steps — read to the model as a fresh
+  request. They now arrive with a "the conversation history before this point was
+  compacted" lead-in and a `<summary>` wrapper.
+
 - Compaction summaries list the files touched by the turn the cut lands in. A
   mid-turn cut summarizes the turn prefix, but its file operations were never
   collected, so the handoff summary reported edited files as read-only (or
