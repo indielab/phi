@@ -3,6 +3,7 @@ package submit
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -10,7 +11,9 @@ import (
 
 	"github.com/pulseaiclub/phi/internal/components/toast"
 	"github.com/pulseaiclub/phi/internal/session"
+	"github.com/pulseaiclub/phi/internal/session/shellhist"
 	"github.com/pulseaiclub/phi/internal/tools"
+	"github.com/pulseaiclub/phi/internal/tools/tooldef"
 	"github.com/pulseaiclub/phi/internal/tui/composer"
 	"github.com/pulseaiclub/phi/internal/tui/controller"
 	"github.com/pulseaiclub/phi/internal/tui/transcript"
@@ -21,6 +24,7 @@ type BashRunner struct {
 	transcript *transcript.TranscriptPane
 	composer   composer.Input
 	bus        *controller.Bus
+	history    *shellhist.Store
 
 	running atomic.Bool
 	mu      sync.Mutex
@@ -31,11 +35,13 @@ func newBashRunner(
 	transcript *transcript.TranscriptPane,
 	composer composer.Input,
 	bus *controller.Bus,
+	history *shellhist.Store,
 ) *BashRunner {
 	return &BashRunner{
 		transcript: transcript,
 		composer:   composer,
 		bus:        bus,
+		history:    history,
 	}
 }
 
@@ -57,7 +63,9 @@ func (b *BashRunner) HandleSubmit(text string) bool {
 		b.showToast("Unable to use shell mode while agent is active", toast.ToastWarning, 3*time.Second)
 		return true
 	}
+	b.mu.Lock()
 	if b.running.Load() {
+		b.mu.Unlock()
 		b.showToast(
 			"A bash command is already running. Press Esc to cancel it first.",
 			toast.ToastWarning,
@@ -65,33 +73,38 @@ func (b *BashRunner) HandleSubmit(text string) bool {
 		)
 		return true
 	}
-
+	ctx, cancel := context.WithCancel(context.Background())
+	b.cancel = cancel
+	b.running.Store(true)
+	b.mu.Unlock()
+	started := time.Now()
+	cwd, cwdErr := os.Getwd()
+	entry := shellhist.Entry{Version: 1, At: started.UnixMilli(), Cwd: cwd, Command: command}
+	if cwdErr == nil {
+		ctx = tooldef.WithCwd(ctx, cwd)
+	}
 	b.composer.HideCompleters()
 	b.composer.ClearInput()
 	b.SyncBorder("")
 
-	id := fmt.Sprintf("bash-%d", time.Now().UnixNano())
+	id := fmt.Sprintf("bash-%d", started.UnixNano())
 	b.transcript.ApplySession(session.LocalBashStart{ID: id, Command: command})
 	b.transcript.Sync()
 	b.transcript.StickToBottom()
 
-	go b.run(id, command)
+	go b.run(ctx, id, entry, cwdErr)
 	return true
 }
 
-func (b *BashRunner) run(id, command string) {
-	b.mu.Lock()
-	ctx, cancel := context.WithCancel(context.Background())
-	b.cancel = cancel
-	b.mu.Unlock()
-	b.running.Store(true)
+func (b *BashRunner) run(ctx context.Context, id string, entry shellhist.Entry, cwdErr error) {
 	defer func() {
-		b.running.Store(false)
 		b.mu.Lock()
+		b.cancel()
 		b.cancel = nil
+		b.running.Store(false)
 		b.mu.Unlock()
 	}()
-
+	command := entry.Command
 	const bashPublishInterval = 100 * time.Millisecond
 
 	liveOutput := newBashLiveOutput(bashPublishInterval, func(cur string) {
@@ -109,6 +122,25 @@ func (b *BashRunner) run(id, command string) {
 		OnChunk: liveOutput.Append,
 	})
 	liveOutput.Close()
+	if b.history != nil {
+		if err == nil && !result.Canceled && result.ExitCode >= 0 {
+			entry.Exit = &result.ExitCode
+		}
+		historyErr := cwdErr
+		if historyErr == nil {
+			historyErr = b.history.Append(entry)
+		}
+		if historyErr != nil {
+			b.showToast(
+				fmt.Sprintf(
+					"Shell history was not saved: %v. Check the working directory and session directory permissions.",
+					historyErr,
+				),
+				toast.ToastWarning,
+				6*time.Second,
+			)
+		}
+	}
 	if err != nil {
 		b.publishSession(session.ToolData{Run: session.ToolRun{
 			ToolUseID: id,
@@ -158,15 +190,15 @@ func (b *BashRunner) showToast(msg string, kind toast.ToastKind, d time.Duration
 
 // Cancel aborts a running user "!cmd". Returns true if one was cancelled.
 func (b *BashRunner) Cancel() bool {
-	if b == nil || !b.running.Load() {
+	if b == nil {
 		return false
 	}
 	b.mu.Lock()
-	cancel := b.cancel
-	b.mu.Unlock()
-	if cancel != nil {
-		cancel()
+	defer b.mu.Unlock()
+	if b.cancel == nil {
+		return false
 	}
+	b.cancel()
 	return true
 }
 

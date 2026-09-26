@@ -31,15 +31,19 @@ import (
 	imgutil "github.com/pulseaiclub/phi/internal/util/image"
 )
 
-// ComposerPane owns the chat input, slash/@ pickers, palette, and session list.
+// ComposerPane owns the chat input, its completer pickers (/, ?, @, !), the
+// palette, and the session list.
 type ComposerPane struct {
 	theme components.Theme
 	cwd   string
 
-	Chat       chat.ChatInput
-	mention    mention.Picker
-	slash      mention.Picker
-	question   mention.Picker
+	Chat     chat.ChatInput
+	mention  mention.Picker
+	slash    mention.Picker
+	question mention.Picker
+	// bash offers completions from shell history while the user types a "!"
+	// command. Its rows are whole commands, so accepting replaces the text.
+	bash       bashSuggest
 	palette    palette.CommandPalette
 	listPicker listpicker.Picker
 
@@ -68,7 +72,7 @@ type ComposerPane struct {
 
 // NewComposerPane builds composer widgets; call Wire before use.
 func NewComposerPane(theme components.Theme, modelLabel, cwd string) *ComposerPane {
-	return &ComposerPane{
+	c := &ComposerPane{
 		theme: theme,
 		cwd:   cwd,
 		Chat:  newChatInput(theme, modelLabel, cwd),
@@ -90,6 +94,8 @@ func NewComposerPane(theme components.Theme, modelLabel, cwd string) *ComposerPa
 			Theme: theme,
 		},
 	}
+	c.bash = newBashSuggest(c, theme)
+	return c
 }
 
 // Wire binds bus, transcript, and editor overlay hooks after Editor assembly.
@@ -148,15 +154,18 @@ func (c *ComposerPane) Wire(
 	c.Chat.OnMentionChange = c.onMentionChange
 	c.Chat.OnSlashChange = c.onSlashChange
 	c.Chat.OnQuestionChange = c.onQuestionChange
+	c.Chat.OnBashChange = c.bash.onChange
 	c.mention.OnAccept = c.acceptMention
 	c.slash.OnAccept = c.acceptSlash
 	c.question.OnAccept = c.acceptQuestion
+	c.bash.picker.OnAccept = c.bash.accept
+	c.bash.picker.OnComplete = c.bash.accept
 	// Tab must never run a command, so slash gets a fill-only completer.
 	// mention/question edit the composer already: accept is the fallback.
 	c.slash.OnComplete = c.completeSlash
 }
 
-// HideCompleters closes mention, slash, question, and @ pickers.
+// HideCompleters closes mention, slash, question, @, and "!" pickers.
 func (c *ComposerPane) HideCompleters() {
 	if c == nil {
 		return
@@ -168,6 +177,9 @@ func (c *ComposerPane) HideCompleters() {
 	c.Chat.SlashOpen = false
 	c.question.Hide()
 	c.Chat.QuestionOpen = false
+	// The "!" picker closes through the one path that also forgets its rows: what
+	// it holds is what it draws, so a picker that is down must hold nothing.
+	c.bash.hide()
 }
 
 // HidePalette closes the command palette if open.
@@ -319,7 +331,7 @@ func (c *ComposerPane) SyncBashBorder(text string) {
 	}
 }
 
-// CloseMentionSlash hides @ and / pickers.
+// CloseMentionSlash hides the @, /, ?, and "!" completers.
 func (c *ComposerPane) CloseMentionSlash() {
 	if c == nil {
 		return
@@ -331,6 +343,7 @@ func (c *ComposerPane) CloseMentionSlash() {
 	c.Chat.SlashOpen = false
 	c.question.Hide()
 	c.Chat.QuestionOpen = false
+	c.bash.hide()
 }
 
 // SetBashBorderActive toggles bash-mode border styling.
@@ -465,6 +478,7 @@ func (c *ComposerPane) SetTheme(th components.Theme) {
 	c.mention.Theme = th
 	c.slash.Theme = th
 	c.question.Theme = th
+	c.bash.picker.Theme = th
 	c.SyncBashBorder(c.Chat.Value)
 }
 
@@ -519,7 +533,7 @@ func (c *ComposerPane) DrawChat(ctx components.DrawContext, width, height int) c
 	)
 }
 
-// PickerOverlays returns slash and @ picker surfaces anchored above the composer.
+// PickerOverlays returns the completer surfaces anchored above the composer.
 func (c *ComposerPane) PickerOverlays(ctx components.DrawContext, listH, width int) []components.SubSurface {
 	if c == nil {
 		return nil
@@ -552,6 +566,16 @@ func (c *ComposerPane) PickerOverlays(ctx components.DrawContext, listH, width i
 		out = append(out, components.SubSurface{
 			Origin:  components.Point{X: 0, Y: 0},
 			Surface: c.mention.Draw(ctx),
+			Z:       15,
+		})
+	}
+	if c.bash.picker.Open {
+		c.bash.picker.AnchorBottomY = listH
+		c.bash.picker.AnchorX = 0
+		c.bash.picker.AnchorWidth = width
+		out = append(out, components.SubSurface{
+			Origin:  components.Point{X: 0, Y: 0},
+			Surface: c.bash.picker.Draw(ctx),
 			Z:       15,
 		})
 	}
@@ -660,6 +684,21 @@ func (c *ComposerPane) Handle(ctx *components.EventContext, ev xui.Event) {
 			}
 			return
 		}
+		// The "!" picker owns the navigation keys only while it has rows: an
+		// empty list that swallowed Enter would make running a "!" command need
+		// two of them. Enter on the row the user already typed would only rewrite
+		// the composer with itself, so it keeps its usual meaning — run it.
+		if c.bash.picker.Open && len(c.bash.picker.Items) > 0 && mentionNavKey(ev) {
+			if ev.Code != xui.KeyEnter || !c.bash.rowIsTypedText() {
+				c.bash.picker.Handle(ctx, ev)
+				if !c.bash.picker.Open {
+					c.Chat.BashOpen = false
+					c.bash.abandon()
+				}
+				return
+			}
+			c.bash.hide()
+		}
 		if c.mention.Open && mentionNavKey(ev) {
 			c.mention.Handle(ctx, ev)
 			if !c.mention.Open {
@@ -726,6 +765,14 @@ func (c *ComposerPane) handleEscape(ctx *components.EventContext) bool {
 	if c.question.Open {
 		c.question.Cancel()
 		c.Chat.QuestionOpen = false
+		ctx.ConsumeAndRedraw()
+		return true
+	}
+	// A judgement in flight is worth dropping even while nothing is on screen
+	// yet. Falling through here would cancel the running turn instead, which is
+	// not what Esc aimed at a "!" command means.
+	if c.bash.pending() {
+		c.bash.hide()
 		ctx.ConsumeAndRedraw()
 		return true
 	}
