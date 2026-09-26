@@ -40,6 +40,31 @@ models:
     default: true
 ```
 
+## Recommended: DeepSeek Flash
+
+`deepseek-flash` is the preset to use for long agent sessions: 1M context, image
+input, and prefix caching that holds up as the transcript grows. Only `name` and
+`api_key` are required.
+
+Measured over 39 LLM rounds of one session — prompt **16k → 40k** — cache hit
+**95–100%** (avg **98.7%**):
+
+| Round | Prompt tokens | Cached tokens | Cache hit |
+| ---: | ---: | ---: | ---: |
+| 1 | 16,176 | 15,872 | **98.1%** |
+| 10 | 20,163 | 20,096 | **99.7%** |
+| 20 | 27,604 | 26,624 | **96.4%** |
+| 30 | 35,245 | 35,072 | **99.5%** |
+| 39 | 39,794 | 39,552 | **99.4%** |
+
+```mermaid
+xychart-beta
+    title "Cache hit % (39 rounds)"
+    x-axis [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39]
+    y-axis "Hit %" 95 --> 100
+    line [98.1, 98.8, 97.5, 98.1, 98.1, 98.8, 99.1, 99.9, 98.7, 99.7, 99.5, 99.5, 96.3, 99.4, 97.0, 99.7, 99.9, 99.3, 98.3, 96.4, 98.9, 98.7, 97.2, 99.8, 95.0, 99.7, 99.2, 98.9, 99.3, 99.5, 99.5, 99.4, 99.2, 98.6, 99.4, 99.6, 100.0, 97.8, 99.4]
+```
+
 ## Other / custom models
 
 Any other `name` works as a normal entry. Set fields yourself:
