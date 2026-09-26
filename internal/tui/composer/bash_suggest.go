@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pulseaiclub/phi/internal/components"
 	"github.com/pulseaiclub/phi/internal/components/chat"
 	"github.com/pulseaiclub/phi/internal/components/mention"
 	"github.com/pulseaiclub/phi/internal/tui/controller"
@@ -24,6 +25,47 @@ const (
 	bashSuggestVisible = 10
 )
 
+// bashSuggest owns the "!" completer: the picker that draws ranked commands,
+// the judgement in flight behind it, and the composer text that judgement
+// answers. ComposerPane holds one and delegates to it, so the state a completion
+// source keeps lives with the completion source instead of as a handful of
+// fields on the pane.
+type bashSuggest struct {
+	// pane is the composer this completer answers for, and the only place it reads
+	// the text to rank, the bus to answer on, and the pickers to yield to from.
+	// Some of those are wired after construction, so a copy taken here would go
+	// stale: newBashSuggest sets it once, which also means a ComposerPane must not
+	// be copied after it is built.
+	pane   *ComposerPane
+	picker mention.Picker
+	// predictor ranks "!" completions. nil disables the picker entirely, so a
+	// session without a judge keeps the composer exactly as it was.
+	predictor BashPredictor
+	gen       int
+	// query is the text the current rows (or the request in flight) answer,
+	// so a cursor move reporting the same query is not answered twice.
+	query string
+	// accepted is the composer text an accept just produced. Filling the
+	// composer fires a change, and the picker must not reopen over its own
+	// answer and ask again.
+	accepted string
+	// cancel stops the prediction in flight; nil before the first one.
+	cancel context.CancelFunc
+}
+
+// newBashSuggest builds the "!" completer for one composer pane: it reads the
+// text it ranks, and the bus it answers on, from there.
+func newBashSuggest(pane *ComposerPane, theme components.Theme) bashSuggest {
+	return bashSuggest{
+		pane: pane,
+		picker: mention.Picker{
+			Theme:    theme,
+			Prefix:   "!",
+			MaxItems: bashSuggestVisible,
+		},
+	}
+}
+
 // SetBashPredictor installs the "!" completion source. Until one is set — or if
 // none is ever set, on a build without a judge — the picker stays closed and
 // the composer behaves exactly as before.
@@ -31,10 +73,10 @@ func (c *ComposerPane) SetBashPredictor(predictor BashPredictor) {
 	if c == nil {
 		return
 	}
-	c.bashPredict = predictor
+	c.bash.predictor = predictor
 }
 
-// onBashChange reacts to the composer text entering or leaving "!" mode.
+// onChange reacts to the composer text entering or leaving "!" mode.
 //
 // Two rules keep the picker from getting in the way of running a command:
 //   - it appears only when it has something to say, and owns the navigation keys
@@ -42,38 +84,31 @@ func (c *ComposerPane) SetBashPredictor(predictor BashPredictor) {
 //     what the user typed rather than be swallowed by an empty list.
 //   - filling the composer is an answer, not a new question, so the text just
 //     accepted is not re-submitted for judgement.
-func (c *ComposerPane) onBashChange(active bool, query string) {
-	if c == nil {
-		return
-	}
+func (b *bashSuggest) onChange(active bool, query string) {
 	// The accepted suggestion is now the composer text: the change it fired is
 	// not a new query.
-	if c.bashAccepted != "" && c.Chat.Value == c.bashAccepted {
-		c.hideBashSuggestions()
+	if b.accepted != "" && b.pane.Chat.Value == b.accepted {
+		b.hide()
 		return
 	}
-	c.bashAccepted = ""
-	if !active || c.bashPredict == nil {
-		c.hideBashSuggestions()
+	b.accepted = ""
+	if !active || b.predictor == nil {
+		b.hide()
 		return
 	}
-	// Another completer owns the composer while it is open: `@path` can sit
-	// inside a "!" command, and two pickers must not fight over one keystroke.
-	// The newest completer wins, as it does between mention and slash.
-	if c.slash.Open || c.Chat.SlashOpen || c.question.Open || c.Chat.QuestionOpen ||
-		c.mention.Open || c.Chat.MentionOpen {
-		c.hideBashSuggestions()
+	if b.yields() {
+		b.hide()
 		return
 	}
 	if strings.TrimSpace(query) == "" {
-		c.hideBashSuggestions()
+		b.hide()
 		return
 	}
 	// A cursor move reports the same query again. Answering it twice would burn
 	// a round trip and flicker the rows away for nothing, so the ranking already
 	// in hand (or already in flight) is kept.
-	if query == c.bashQuery && (len(c.bash.Items) > 0 || c.bashCancel != nil) {
-		c.showBashPicker()
+	if query == b.query && (len(b.picker.Items) > 0 || b.cancel != nil) {
+		b.show()
 		return
 	}
 
@@ -83,86 +118,98 @@ func (c *ComposerPane) onBashChange(active bool, query string) {
 	// list for the round trip it takes to replace it. The picker goes with the
 	// rows — a list with nothing in it has nothing to say — and so does any
 	// placeholder for them, however long that round trip turns out to be.
-	c.bash.SetResults(nil, "")
-	c.showBashPicker()
-	c.scheduleBashSuggest(query)
+	b.picker.SetResults(nil, "")
+	b.show()
+	b.schedule(query)
 }
 
-// showBashPicker reveals the picker when it has something to say — rows to walk
+// yields reports whether another completer owns the composer: `@path` can sit
+// inside a "!" command, and two pickers must not fight over one keystroke. The
+// newest completer wins, as it does between mention and slash.
+func (b *bashSuggest) yields() bool {
+	c := b.pane
+	return c.slash.Open || c.Chat.SlashOpen || c.question.Open || c.Chat.QuestionOpen ||
+		c.mention.Open || c.Chat.MentionOpen
+}
+
+// show reveals the picker when it has something to say — rows to walk
 // or a status to read — and claims the navigation keys only with rows: an
 // open-but-empty list that ate Enter would make running a "!" command need two.
 // Visibility is derived from the content here, so no caller has to order its own
 // mutations against it.
-func (c *ComposerPane) showBashPicker() {
-	if len(c.bash.Items) == 0 && c.bash.Status == "" {
-		c.bash.Hide()
-		c.Chat.BashOpen = false
+func (b *bashSuggest) show() {
+	if len(b.picker.Items) == 0 && b.picker.Status == "" {
+		b.picker.Hide()
+		b.pane.Chat.BashOpen = false
 		return
 	}
-	c.bash.Show()
-	c.Chat.BashOpen = len(c.bash.Items) > 0
+	b.picker.Show()
+	b.pane.Chat.BashOpen = len(b.picker.Items) > 0
 }
 
-// bashRowIsTypedText reports whether the highlighted row is already what the
+// rowIsTypedText reports whether the highlighted row is already what the
 // user typed. Accepting it would rewrite the composer with itself, so Enter
 // keeps its usual meaning — run the command.
-func (c *ComposerPane) bashRowIsTypedText() bool {
-	if c.bash.Selected < 0 || c.bash.Selected >= len(c.bash.Items) {
+func (b *bashSuggest) rowIsTypedText() bool {
+	if b.picker.Selected < 0 || b.picker.Selected >= len(b.picker.Items) {
 		return false
 	}
-	query, _, ok := chat.ActiveBash(c.Chat.Value, c.Chat.Cursor)
+	query, _, ok := chat.ActiveBash(b.pane.Chat.Value, b.pane.Chat.Cursor)
 	if !ok {
 		return false
 	}
-	return strings.TrimSpace(c.bash.Items[c.bash.Selected].Path) == strings.TrimSpace(query)
+	return strings.TrimSpace(b.picker.Items[b.picker.Selected].Path) == strings.TrimSpace(query)
 }
 
-// hideBashSuggestions closes the picker and stops the prediction behind it.
+// pending reports whether there is anything of the "!" completer left to
+// dismiss: rows on screen, or a judgement in flight that has not drawn yet.
+func (b *bashSuggest) pending() bool {
+	return b.picker.Open || b.cancel != nil
+}
+
+// hide closes the picker and stops the prediction behind it.
 // The query is forgotten with it: re-entering "!" mode is a fresh question, and
 // nothing is left behind to answer it with.
-func (c *ComposerPane) hideBashSuggestions() {
-	if c == nil {
-		return
-	}
-	c.bash.SetResults(nil, "")
-	c.bash.Hide()
-	c.Chat.BashOpen = false
-	c.bashQuery = ""
-	c.abandonBashSuggest()
+func (b *bashSuggest) hide() {
+	b.picker.SetResults(nil, "")
+	b.picker.Hide()
+	b.pane.Chat.BashOpen = false
+	b.query = ""
+	b.abandon()
 }
 
-// abandonBashSuggest drops any prediction still in flight. Bumping the
+// abandon drops any prediction still in flight. Bumping the
 // generation alone only makes the UI ignore the answer; the request keeps
 // burning a round trip until its context is cancelled.
-func (c *ComposerPane) abandonBashSuggest() {
-	c.bashGen++
-	if c.bashCancel != nil {
-		c.bashCancel()
-		c.bashCancel = nil
+func (b *bashSuggest) abandon() {
+	b.gen++
+	if b.cancel != nil {
+		b.cancel()
+		b.cancel = nil
 	}
 }
 
-// scheduleBashSuggest debounces one keystroke's query, then asks the predictor.
+// schedule debounces one keystroke's query, then asks the predictor.
 // The work runs off the UI goroutine and answers on the bus, like the @-file
 // search: the composer never blocks on a judgement.
 //
 // Nothing is drawn while it waits. A row saying "asking" would appear a beat
 // before the ranking replaces it, which reads as a flicker rather than as
 // information, and the wait is bounded by bashSuggestTimeout either way.
-func (c *ComposerPane) scheduleBashSuggest(query string) {
-	if c == nil || c.bashPredict == nil {
+func (b *bashSuggest) schedule(query string) {
+	if b.predictor == nil {
 		return
 	}
-	c.abandonBashSuggest()
-	gen := c.bashGen
-	predictor := c.bashPredict
-	bus := c.bus
+	b.abandon()
+	gen := b.gen
+	predictor := b.predictor
+	bus := b.pane.bus
 	// Recorded here rather than by the caller, so abandoning the request above
 	// cannot erase what this one was asked about.
-	c.bashQuery = query
+	b.query = query
 
 	ctx, cancel := context.WithCancel(context.Background())
-	c.bashCancel = cancel
+	b.cancel = cancel
 
 	go func() {
 		defer cancel()
@@ -192,25 +239,33 @@ func (c *ComposerPane) scheduleBashSuggest(query string) {
 
 // ApplyBashSuggestions applies one prediction on the UI goroutine.
 func (c *ComposerPane) ApplyBashSuggestions(msg controller.BashSuggestionsMsg) {
-	if c == nil || msg.Gen != c.bashGen {
+	if c == nil {
+		return
+	}
+	c.bash.apply(msg)
+}
+
+// apply applies one prediction.
+func (b *bashSuggest) apply(msg controller.BashSuggestionsMsg) {
+	if msg.Gen != b.gen {
 		return
 	}
 	// The buffer may have moved on without a new prediction being scheduled
 	// (a cursor move, say): showing this ranking would suggest the wrong
 	// completion for what is on screen.
-	if query, _, ok := chat.ActiveBash(c.Chat.Value, c.Chat.Cursor); !ok || query != msg.Query {
+	if query, _, ok := chat.ActiveBash(b.pane.Chat.Value, b.pane.Chat.Cursor); !ok || query != msg.Query {
 		return
 	}
 	if msg.ErrText != "" {
 		// The picker stays up to say why, but with no rows it must not hold the
 		// navigation keys: Enter still has to run what the user typed.
-		c.bash.SetResults(nil, msg.ErrText)
-		c.showBashPicker()
+		b.picker.SetResults(nil, msg.ErrText)
+		b.show()
 		return
 	}
 	if len(msg.Items) == 0 {
 		// Nothing worth showing: a picker with no rows is noise.
-		c.hideBashSuggestions()
+		b.hide()
 		return
 	}
 	items := make([]mention.Item, 0, len(msg.Items))
@@ -220,10 +275,10 @@ func (c *ComposerPane) ApplyBashSuggestions(msg controller.BashSuggestionsMsg) {
 			Description: bashSuggestionLabel(item),
 		})
 	}
-	c.bash.SetResults(items, "")
+	b.picker.SetResults(items, "")
 	// There are rows to navigate now, so the picker opens and takes the
 	// navigation keys back from the composer.
-	c.showBashPicker()
+	b.show()
 }
 
 // bashSuggestionLabel describes how the row was ranked, so a literal completion
@@ -235,38 +290,35 @@ func bashSuggestionLabel(item controller.BashSuggestion) string {
 	return fmt.Sprintf("%.2f", item.Score)
 }
 
-// acceptBash fills the composer with the chosen command, replacing what was
+// accept fills the composer with the chosen command, replacing what was
 // typed. The command is inserted whole because the picker ranks whole commands:
 // the typed text may be an abbreviation rather than a prefix.
-func (c *ComposerPane) acceptBash(item mention.Item) {
-	if c == nil {
-		return
-	}
-	start, end := c.bashReplaceRange()
-	c.hideBashSuggestions()
-	c.Chat.ReplaceRange(start, end, item.Path)
+func (b *bashSuggest) accept(item mention.Item) {
+	start, end := b.replaceRange()
+	b.hide()
+	b.pane.Chat.ReplaceRange(start, end, item.Path)
 	// ReplaceRange notifies synchronously, so the picker may already have
 	// reopened for the text just accepted. Record that this text is an answer
 	// already given, and close what that notification opened.
-	c.bashAccepted = c.Chat.Value
-	c.hideBashSuggestions()
-	if c.onRedraw != nil {
-		c.onRedraw()
+	b.accepted = b.pane.Chat.Value
+	b.hide()
+	if b.pane.onRedraw != nil {
+		b.pane.onRedraw()
 	}
 }
 
-// bashReplaceRange resolves the composer range an accepted suggestion replaces:
+// replaceRange resolves the composer range an accepted suggestion replaces:
 // the whole command text after "!", or the cursor when "!" mode is somehow no
 // longer active.
 //
 // The range runs to the end of the buffer, not to the cursor: a row is a whole
 // command, so replacing only up to the cursor would splice the accepted command
 // into the middle of the typed one.
-func (c *ComposerPane) bashReplaceRange() (start, end int) {
-	if _, start, ok := chat.ActiveBash(c.Chat.Value, c.Chat.Cursor); ok {
-		return start, len(c.Chat.Value)
+func (b *bashSuggest) replaceRange() (start, end int) {
+	if _, start, ok := chat.ActiveBash(b.pane.Chat.Value, b.pane.Chat.Cursor); ok {
+		return start, len(b.pane.Chat.Value)
 	}
-	return c.Chat.Cursor, c.Chat.Cursor
+	return b.pane.Chat.Cursor, b.pane.Chat.Cursor
 }
 
 // bashSuggestError turns a prediction failure into something the user can act

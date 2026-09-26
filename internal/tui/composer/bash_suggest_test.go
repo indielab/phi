@@ -86,19 +86,19 @@ func TestBashSuggestionsRankIntoThePicker(t *testing.T) {
 	c, bus := newBashPane(t, predictor)
 
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
-	c.onBashChange(true, "git s")
-	assert.False(t, c.bash.Open, "typing in ! mode shows nothing: there is nothing to show yet")
+	c.bash.onChange(true, "git s")
+	assert.False(t, c.bash.picker.Open, "typing in ! mode shows nothing: there is nothing to show yet")
 	assert.False(t, c.Chat.BashOpen, "an empty list must not own the navigation keys")
-	assert.Empty(t, c.bash.Status, "and no status stands in for the ranking it is waiting for")
+	assert.Empty(t, c.bash.picker.Status, "and no status stands in for the ranking it is waiting for")
 
 	c.ApplyBashSuggestions(drainBash(t, bus))
 
 	assert.Equal(t, []mention.Item{
 		{Path: "git stash", Description: "0.70"},
 		{Path: "git status", Description: "0.30 · prefix"},
-	}, c.bash.Items)
-	assert.Empty(t, c.bash.Status, "results leave no status behind")
-	assert.True(t, c.bash.Open, "the ranking opens the picker")
+	}, c.bash.picker.Items)
+	assert.Empty(t, c.bash.picker.Status, "results leave no status behind")
+	assert.True(t, c.bash.picker.Open, "the ranking opens the picker")
 	assert.True(t, c.Chat.BashOpen, "rows to navigate means the picker owns the keys")
 	assert.Equal(t, []string{"git s"}, predictor.asked())
 }
@@ -109,16 +109,16 @@ func TestAcceptBashReplacesTheTypedCommand(t *testing.T) {
 	c, bus := wiredComposer(t)
 	c.SetBashPredictor(&fakeBashPredictor{})
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
-	c.onBashChange(true, "git s")
-	c.bash.SetResults([]mention.Item{{Path: "git status", Description: "0.90"}}, "")
-	c.showBashPicker()
+	c.bash.onChange(true, "git s")
+	c.bash.picker.SetResults([]mention.Item{{Path: "git status", Description: "0.90"}}, "")
+	c.bash.show()
 
-	c.acceptBash(c.bash.Items[0])
+	c.bash.accept(c.bash.picker.Items[0])
 
 	assert.Equal(t, "!git status", c.Chat.Value, "the whole command replaces what was typed")
 	assert.Equal(t, len("!git status"), c.Chat.Cursor)
 	assert.False(t, c.Chat.BashOpen, "accepting closes the picker")
-	assert.False(t, c.bash.Open, "filling the composer is an answer, not a new query")
+	assert.False(t, c.bash.picker.Open, "filling the composer is an answer, not a new query")
 	assert.Empty(t, bus.Drain(), "an accepted command is not re-submitted")
 }
 
@@ -126,7 +126,7 @@ func TestAcceptBashKeepsTheBang(t *testing.T) {
 	c, _ := newBashPane(t, &fakeBashPredictor{})
 	c.Chat.Value, c.Chat.Cursor = "  !ls", len("  !ls")
 
-	c.acceptBash(mention.Item{Path: "ls -la"})
+	c.bash.accept(mention.Item{Path: "ls -la"})
 
 	assert.Equal(t, "  !ls -la", c.Chat.Value, "the prefix before the bang is left alone")
 }
@@ -138,7 +138,7 @@ func TestAcceptBashReplacesTheWholeCommandFromAMidCommandCursor(t *testing.T) {
 	c, _ := newBashPane(t, &fakeBashPredictor{})
 	c.Chat.Value, c.Chat.Cursor = "!git status", 3
 
-	c.acceptBash(mention.Item{Path: "git stash"})
+	c.bash.accept(mention.Item{Path: "git stash"})
 
 	assert.Equal(t, "!git stash", c.Chat.Value)
 }
@@ -149,8 +149,8 @@ func TestSupersededBashSuggestionStaysQuiet(t *testing.T) {
 
 	// The second keystroke lands inside the debounce window of the first.
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
-	c.onBashChange(true, "git s")
-	c.onBashChange(true, "git st")
+	c.bash.onChange(true, "git s")
+	c.bash.onChange(true, "git st")
 
 	first := drainBash(t, bus)
 	assert.Equal(t, "git st", first.Query, "only the newest query is answered")
@@ -162,18 +162,18 @@ func TestNewQueryDropsThePreviousRanking(t *testing.T) {
 	c, bus := newBashPane(t, predictor)
 
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
-	c.onBashChange(true, "git s")
+	c.bash.onChange(true, "git s")
 	c.ApplyBashSuggestions(drainBash(t, bus))
-	require.Len(t, c.bash.Items, 1)
+	require.Len(t, c.bash.picker.Items, 1)
 
 	// Typing on: the shown scores belong to the text that produced them, so the
 	// picker must not keep displaying them against the new query.
 	c.Chat.Value, c.Chat.Cursor = "!git sta", len("!git sta")
-	c.onBashChange(true, "git sta")
+	c.bash.onChange(true, "git sta")
 
-	assert.Empty(t, c.bash.Items, "a ranking for other text must not be shown")
-	assert.Empty(t, c.bash.Status, "and no placeholder stands in for it")
-	assert.False(t, c.bash.Open, "the dropped rows take the picker with them")
+	assert.Empty(t, c.bash.picker.Items, "a ranking for other text must not be shown")
+	assert.Empty(t, c.bash.picker.Status, "and no placeholder stands in for it")
+	assert.False(t, c.bash.picker.Open, "the dropped rows take the picker with them")
 	assert.False(t, c.Chat.BashOpen, "the dropped rows give the keys back while the rerank runs")
 }
 
@@ -181,9 +181,9 @@ func TestBashSuggestionsAreDroppedWhenTheRequestWasCancelled(t *testing.T) {
 	predictor := &fakeBashPredictor{cancelErr: errors.New("blocked until cancelled")}
 	c, bus := newBashPane(t, predictor)
 
-	c.onBashChange(true, "git s")
+	c.bash.onChange(true, "git s")
 	waitFor(t, func() bool { return len(predictor.asked()) == 1 })
-	c.hideBashSuggestions()
+	c.bash.hide()
 
 	time.Sleep(2 * bashSuggestDebounce)
 	for _, m := range bus.Drain() {
@@ -195,64 +195,64 @@ func TestBashSuggestionsAreDroppedWhenTheRequestWasCancelled(t *testing.T) {
 func TestApplyBashSuggestionsIgnoresStaleResults(t *testing.T) {
 	c, _ := newBashPane(t, &fakeBashPredictor{})
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
-	c.onBashChange(true, "git s")
+	c.bash.onChange(true, "git s")
 
 	c.ApplyBashSuggestions(controller.BashSuggestionsMsg{
-		Gen:   c.bashGen - 1,
+		Gen:   c.bash.gen - 1,
 		Query: "git s",
 		Items: []controller.BashSuggestion{{Command: "git stash"}},
 	})
 
-	assert.Empty(t, c.bash.Items, "a result from a superseded request is ignored")
+	assert.Empty(t, c.bash.picker.Items, "a result from a superseded request is ignored")
 }
 
 func TestApplyBashSuggestionsIgnoresResultsForOldText(t *testing.T) {
 	c, _ := newBashPane(t, &fakeBashPredictor{})
 	c.Chat.Value, c.Chat.Cursor = "!git status", len("!git status")
-	c.onBashChange(true, "git status")
+	c.bash.onChange(true, "git status")
 
 	// Same generation, but the composer has moved on since the request started.
 	c.ApplyBashSuggestions(controller.BashSuggestionsMsg{
-		Gen:   c.bashGen,
+		Gen:   c.bash.gen,
 		Query: "git s",
 		Items: []controller.BashSuggestion{{Command: "git stash"}},
 	})
 
-	assert.Empty(t, c.bash.Items, "a ranking for other text must not be shown")
+	assert.Empty(t, c.bash.picker.Items, "a ranking for other text must not be shown")
 }
 
 func TestApplyBashSuggestionsHidesAnEmptyResult(t *testing.T) {
 	c, _ := newBashPane(t, &fakeBashPredictor{})
 	c.Chat.Value, c.Chat.Cursor = "!zzz", len("!zzz")
-	c.onBashChange(true, "zzz")
+	c.bash.onChange(true, "zzz")
 
-	c.ApplyBashSuggestions(controller.BashSuggestionsMsg{Gen: c.bashGen, Query: "zzz"})
+	c.ApplyBashSuggestions(controller.BashSuggestionsMsg{Gen: c.bash.gen, Query: "zzz"})
 
-	assert.False(t, c.bash.Open, "an empty picker is noise")
+	assert.False(t, c.bash.picker.Open, "an empty picker is noise")
 	assert.False(t, c.Chat.BashOpen)
 }
 
 func TestApplyBashSuggestionsReportsFailureWithoutRows(t *testing.T) {
 	c, _ := newBashPane(t, &fakeBashPredictor{})
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
-	c.onBashChange(true, "git s")
+	c.bash.onChange(true, "git s")
 
 	c.ApplyBashSuggestions(controller.BashSuggestionsMsg{
-		Gen:     c.bashGen,
+		Gen:     c.bash.gen,
 		Query:   "git s",
 		ErrText: "Completions unavailable",
 	})
 
-	assert.Empty(t, c.bash.Items)
-	assert.Equal(t, "Completions unavailable", c.bash.Status)
-	assert.True(t, c.bash.Open, "the picker opens to say why")
+	assert.Empty(t, c.bash.picker.Items)
+	assert.Equal(t, "Completions unavailable", c.bash.picker.Status)
+	assert.True(t, c.bash.picker.Open, "the picker opens to say why")
 }
 
 func TestBashPredictorFailureIsActionable(t *testing.T) {
 	c, bus := newBashPane(t, &fakeBashPredictor{err: errors.New("typesafe API error (500): boom")})
 
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
-	c.onBashChange(true, "git s")
+	c.bash.onChange(true, "git s")
 
 	msg := drainBash(t, bus)
 
@@ -263,9 +263,9 @@ func TestBashPredictorFailureIsActionable(t *testing.T) {
 func TestBashSuggestionsStayOffWithoutAPredictor(t *testing.T) {
 	c, bus := newBashPane(t, nil)
 
-	c.onBashChange(true, "git s")
+	c.bash.onChange(true, "git s")
 
-	assert.False(t, c.bash.Open)
+	assert.False(t, c.bash.picker.Open)
 	assert.False(t, c.Chat.BashOpen)
 	assert.Empty(t, bus.Drain(), "no predictor, no request")
 }
@@ -275,11 +275,11 @@ func TestBashSuggestionsSkipShortText(t *testing.T) {
 	c, bus := newBashPane(t, predictor)
 
 	c.Chat.Value, c.Chat.Cursor = "!", 1
-	c.onBashChange(true, "")
+	c.bash.onChange(true, "")
 	c.Chat.Value = "!  "
-	c.onBashChange(true, "  ")
+	c.bash.onChange(true, "  ")
 
-	assert.False(t, c.bash.Open, "a bare bang is not a query")
+	assert.False(t, c.bash.picker.Open, "a bare bang is not a query")
 	assert.Empty(t, predictor.asked())
 	assert.Empty(t, bus.Drain())
 }
@@ -289,28 +289,28 @@ func TestBashSuggestionsYieldToAnotherCompleter(t *testing.T) {
 	c, _ := newBashPane(t, predictor)
 
 	c.slash.Open, c.Chat.SlashOpen = true, true
-	c.onBashChange(true, "git s")
+	c.bash.onChange(true, "git s")
 
-	assert.False(t, c.bash.Open, "two pickers must not fight over one keystroke")
+	assert.False(t, c.bash.picker.Open, "two pickers must not fight over one keystroke")
 	assert.Empty(t, predictor.asked())
 
 	c.slash.Open, c.Chat.SlashOpen = false, false
 	c.mention.Open, c.Chat.MentionOpen = true, true
-	c.onBashChange(true, "git s")
+	c.bash.onChange(true, "git s")
 	assert.Empty(t, predictor.asked())
 }
 
 func TestLeavingBashModeClosesThePicker(t *testing.T) {
 	c, _ := newBashPane(t, &fakeBashPredictor{})
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
-	c.onBashChange(true, "git s")
-	c.bash.SetResults([]mention.Item{{Path: "git stash"}}, "")
-	c.showBashPicker()
-	require.True(t, c.bash.Open)
+	c.bash.onChange(true, "git s")
+	c.bash.picker.SetResults([]mention.Item{{Path: "git stash"}}, "")
+	c.bash.show()
+	require.True(t, c.bash.picker.Open)
 
-	c.onBashChange(false, "")
+	c.bash.onChange(false, "")
 
-	assert.False(t, c.bash.Open)
+	assert.False(t, c.bash.picker.Open)
 	assert.False(t, c.Chat.BashOpen)
 }
 
@@ -318,13 +318,13 @@ func TestHideCompletersCancelsThePrediction(t *testing.T) {
 	predictor := &fakeBashPredictor{cancelErr: errors.New("blocked")}
 	c, _ := newBashPane(t, predictor)
 
-	c.onBashChange(true, "git s")
+	c.bash.onChange(true, "git s")
 	waitFor(t, func() bool { return len(predictor.asked()) == 1 })
 
 	cancelled := make(chan struct{})
-	inner := c.bashCancel
+	inner := c.bash.cancel
 	require.NotNil(t, inner, "a prediction in flight must be cancellable")
-	c.bashCancel = func() { close(cancelled); inner() }
+	c.bash.cancel = func() { close(cancelled); inner() }
 
 	c.HideCompleters()
 
@@ -341,8 +341,8 @@ func TestEnterRunsTheCommandBeforeAnyRankingArrives(t *testing.T) {
 	c, bus := wiredComposer(t)
 	c.SetBashPredictor(&fakeBashPredictor{cancelErr: errors.New("still thinking")})
 	pressText(t, c, "!git status")
-	require.False(t, c.bash.Open, "nothing to show, nothing on screen")
-	require.Empty(t, c.bash.Items)
+	require.False(t, c.bash.picker.Open, "nothing to show, nothing on screen")
+	require.Empty(t, c.bash.picker.Items)
 
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyEnter, Press: true})
 
@@ -355,9 +355,9 @@ func TestEnterRunsTheCommandWhenTheRowIsAlreadyTyped(t *testing.T) {
 	c, bus := wiredComposer(t)
 	c.SetBashPredictor(&fakeBashPredictor{})
 	c.Chat.Value, c.Chat.Cursor = "!git status", len("!git status")
-	c.onBashChange(true, "git status")
-	c.bash.SetResults([]mention.Item{{Path: "git status"}, {Path: "git stash"}}, "")
-	c.showBashPicker()
+	c.bash.onChange(true, "git status")
+	c.bash.picker.SetResults([]mention.Item{{Path: "git status"}, {Path: "git stash"}}, "")
+	c.bash.show()
 
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyEnter, Press: true})
 
@@ -369,9 +369,9 @@ func TestEnterAcceptsARowThatDiffersFromWhatWasTyped(t *testing.T) {
 	c, bus := wiredComposer(t)
 	c.SetBashPredictor(&fakeBashPredictor{})
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
-	c.onBashChange(true, "git s")
-	c.bash.SetResults([]mention.Item{{Path: "git stash"}}, "")
-	c.showBashPicker()
+	c.bash.onChange(true, "git s")
+	c.bash.picker.SetResults([]mention.Item{{Path: "git stash"}}, "")
+	c.bash.show()
 
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyEnter, Press: true})
 
@@ -386,7 +386,7 @@ func TestNavigationKeysStayWithTheComposerUntilThereAreRows(t *testing.T) {
 	// rows must not hold them.
 	pressText(t, c, "!for f in *; do\necho done")
 	c.Chat.Cursor = len(c.Chat.Value)
-	require.False(t, c.bash.Open, "nothing to show means nothing on screen")
+	require.False(t, c.bash.picker.Open, "nothing to show means nothing on screen")
 
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyUp, Press: true})
 
@@ -401,20 +401,20 @@ func TestEnterRunsTheCommandWhileARerankIsInFlight(t *testing.T) {
 	c, bus := wiredComposer(t)
 	c.SetBashPredictor(&fakeBashPredictor{items: []controller.BashSuggestion{{Command: "git stash", Score: 0.9}}})
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
-	c.onBashChange(true, "git s")
+	c.bash.onChange(true, "git s")
 	c.ApplyBashSuggestions(drainBash(t, bus))
 	require.True(t, c.Chat.BashOpen)
 
 	c.SetBashPredictor(&fakeBashPredictor{cancelErr: errors.New("still thinking")})
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyRune, Rune: 't', Press: true})
-	require.False(t, c.bash.Open, "the dropped rows take the picker with them")
-	require.Empty(t, c.bash.Items)
+	require.False(t, c.bash.picker.Open, "the dropped rows take the picker with them")
+	require.Empty(t, c.bash.picker.Items)
 	require.False(t, c.Chat.BashOpen, "no rows means no key claim")
 
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyEnter, Press: true})
 
 	assert.Equal(t, "!git st", submittedText(t, bus), "Enter runs what the user typed")
-	c.hideBashSuggestions()
+	c.bash.hide()
 }
 
 // A failed judgement leaves a message where the rows were. The message is not
@@ -423,17 +423,17 @@ func TestEnterRunsTheCommandAfterAFailedRanking(t *testing.T) {
 	c, bus := wiredComposer(t)
 	c.SetBashPredictor(&fakeBashPredictor{items: []controller.BashSuggestion{{Command: "git stash", Score: 0.9}}})
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
-	c.onBashChange(true, "git s")
+	c.bash.onChange(true, "git s")
 	c.ApplyBashSuggestions(drainBash(t, bus))
 	require.True(t, c.Chat.BashOpen)
 
 	c.ApplyBashSuggestions(controller.BashSuggestionsMsg{
-		Gen:     c.bashGen,
+		Gen:     c.bash.gen,
 		Query:   "git s",
 		ErrText: "Completions unavailable",
 	})
 
-	assert.Equal(t, "Completions unavailable", c.bash.Status)
+	assert.Equal(t, "Completions unavailable", c.bash.picker.Status)
 	assert.False(t, c.Chat.BashOpen, "a status row is not a row to navigate")
 
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyEnter, Press: true})
@@ -450,12 +450,12 @@ func TestBashPickerNavigatesTheRankedRows(t *testing.T) {
 		{Command: "git status", Score: 0.5, IsPrefix: true},
 	}})
 	c.Chat.Value, c.Chat.Cursor = "!git st", len("!git st")
-	c.onBashChange(true, "git st")
+	c.bash.onChange(true, "git st")
 	c.ApplyBashSuggestions(drainBash(t, bus))
-	require.Len(t, c.bash.Items, 2)
+	require.Len(t, c.bash.picker.Items, 2)
 
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyDown, Press: true})
-	require.Equal(t, 1, c.bash.Selected, "Down walks the ranking")
+	require.Equal(t, 1, c.bash.picker.Selected, "Down walks the ranking")
 
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyTab, Press: true})
 
@@ -470,7 +470,7 @@ func TestSetThemeRestylesTheBashPicker(t *testing.T) {
 
 	c.SetTheme(th)
 
-	assert.Equal(t, th, c.bash.Theme)
+	assert.Equal(t, th, c.bash.picker.Theme)
 }
 
 func TestRepeatedQueryIsNotAskedTwice(t *testing.T) {
@@ -480,13 +480,13 @@ func TestRepeatedQueryIsNotAskedTwice(t *testing.T) {
 	c, bus := newBashPane(t, predictor)
 
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
-	c.onBashChange(true, "git s")
+	c.bash.onChange(true, "git s")
 	c.ApplyBashSuggestions(drainBash(t, bus))
-	require.Len(t, c.bash.Items, 1)
+	require.Len(t, c.bash.picker.Items, 1)
 
-	c.onBashChange(true, "git s")
+	c.bash.onChange(true, "git s")
 
-	assert.Len(t, c.bash.Items, 1, "the ranking already in hand is kept")
+	assert.Len(t, c.bash.picker.Items, 1, "the ranking already in hand is kept")
 	assert.Equal(t, []string{"git s"}, predictor.asked(), "the judge is asked once per distinct query")
 	assert.True(t, c.Chat.BashOpen)
 }
@@ -501,7 +501,7 @@ func TestEscapeDropsAJudgementThatHasNotDrawnAnything(t *testing.T) {
 
 	pressText(t, c, "!git status")
 	waitFor(t, func() bool { return len(predictor.asked()) == 1 })
-	require.False(t, c.bash.Open, "nothing is on screen to dismiss yet")
+	require.False(t, c.bash.picker.Open, "nothing is on screen to dismiss yet")
 
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyEscape, Press: true})
 
@@ -509,9 +509,9 @@ func TestEscapeDropsAJudgementThatHasNotDrawnAnything(t *testing.T) {
 	time.Sleep(2 * bashSuggestDebounce)
 
 	assert.Empty(t, bus.Drain(), "a dismissed judgement must not come back")
-	assert.False(t, c.bash.Open)
+	assert.False(t, c.bash.picker.Open)
 	assert.False(t, c.Chat.BashOpen)
-	assert.Empty(t, c.bash.Status)
+	assert.Empty(t, c.bash.picker.Status)
 }
 
 // pressText types value through the composer's real key path, so the completer
