@@ -221,7 +221,10 @@ xychart-beta
 | `PHI_BASE_URL` | `models[].base_url`（默认模型） |
 | `PHI_SKILL_PATH` | `skill_path` |
 | `PHI_THINK_LEVEL` | `models[].think_level`（默认模型；`off` 关闭思考） |
+| `PHI_OPTIMIZER` | 优化器功能的主开关（设为 `0`、`false`、`off`、`no` 可禁用） |
+| `TYPESAFE_API_KEY` | 使用优化器功能所需的 TypeSafe API 密钥 |
 
+**安全提示：** 开启优化器后，命令历史与上下文会发送到外部 TypeSafe 服务进行评判和排序。避免在可能包含敏感信息（API 密钥、令牌、凭证）的环境中使用优化器。
 提供商路由看显式 `api` 字段（`OpenAI` / `Anthropic` / `Gemini`）。详见 [支持的模型](doc/models.md)。
 
 ### 工作区布局
