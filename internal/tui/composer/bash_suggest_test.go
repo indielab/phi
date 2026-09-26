@@ -87,9 +87,9 @@ func TestBashSuggestionsRankIntoThePicker(t *testing.T) {
 
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
 	c.onBashChange(true, "git s")
-	require.True(t, c.bash.Open, "typing in ! mode opens the picker")
-	assert.False(t, c.Chat.BashOpen, "an empty list must not own the navigation keys yet")
-	assert.Equal(t, "Asking Jev…", c.bash.Status)
+	assert.False(t, c.bash.Open, "typing in ! mode shows nothing: there is nothing to show yet")
+	assert.False(t, c.Chat.BashOpen, "an empty list must not own the navigation keys")
+	assert.Empty(t, c.bash.Status, "and no status stands in for the ranking it is waiting for")
 
 	c.ApplyBashSuggestions(drainBash(t, bus))
 
@@ -97,7 +97,8 @@ func TestBashSuggestionsRankIntoThePicker(t *testing.T) {
 		{Path: "git stash", Description: "0.70"},
 		{Path: "git status", Description: "0.30 · prefix"},
 	}, c.bash.Items)
-	assert.Empty(t, c.bash.Status, "results replace the placeholder status")
+	assert.Empty(t, c.bash.Status, "results leave no status behind")
+	assert.True(t, c.bash.Open, "the ranking opens the picker")
 	assert.True(t, c.Chat.BashOpen, "rows to navigate means the picker owns the keys")
 	assert.Equal(t, []string{"git s"}, predictor.asked())
 }
@@ -110,7 +111,7 @@ func TestAcceptBashReplacesTheTypedCommand(t *testing.T) {
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
 	c.onBashChange(true, "git s")
 	c.bash.SetResults([]mention.Item{{Path: "git status", Description: "0.90"}}, "")
-	c.Chat.BashOpen = true
+	c.showBashPicker()
 
 	c.acceptBash(c.bash.Items[0])
 
@@ -171,7 +172,8 @@ func TestNewQueryDropsThePreviousRanking(t *testing.T) {
 	c.onBashChange(true, "git sta")
 
 	assert.Empty(t, c.bash.Items, "a ranking for other text must not be shown")
-	assert.Equal(t, "Asking Jev…", c.bash.Status)
+	assert.Empty(t, c.bash.Status, "and no placeholder stands in for it")
+	assert.False(t, c.bash.Open, "the dropped rows take the picker with them")
 	assert.False(t, c.Chat.BashOpen, "the dropped rows give the keys back while the rerank runs")
 }
 
@@ -243,6 +245,7 @@ func TestApplyBashSuggestionsReportsFailureWithoutRows(t *testing.T) {
 
 	assert.Empty(t, c.bash.Items)
 	assert.Equal(t, "Completions unavailable", c.bash.Status)
+	assert.True(t, c.bash.Open, "the picker opens to say why")
 }
 
 func TestBashPredictorFailureIsActionable(t *testing.T) {
@@ -301,6 +304,8 @@ func TestLeavingBashModeClosesThePicker(t *testing.T) {
 	c, _ := newBashPane(t, &fakeBashPredictor{})
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
 	c.onBashChange(true, "git s")
+	c.bash.SetResults([]mention.Item{{Path: "git stash"}}, "")
+	c.showBashPicker()
 	require.True(t, c.bash.Open)
 
 	c.onBashChange(false, "")
@@ -330,13 +335,13 @@ func TestHideCompletersCancelsThePrediction(t *testing.T) {
 	}
 }
 
-// Enter must still run the typed command. An open-but-empty picker that owned
-// Enter would swallow it, making "!cmd⏎" need two presses.
+// Enter must still run the typed command. A picker with no rows must not own
+// Enter, or "!cmd⏎" would need two presses.
 func TestEnterRunsTheCommandBeforeAnyRankingArrives(t *testing.T) {
 	c, bus := wiredComposer(t)
 	c.SetBashPredictor(&fakeBashPredictor{cancelErr: errors.New("still thinking")})
 	pressText(t, c, "!git status")
-	require.True(t, c.bash.Open, "the picker is up while it asks")
+	require.False(t, c.bash.Open, "nothing to show, nothing on screen")
 	require.Empty(t, c.bash.Items)
 
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyEnter, Press: true})
@@ -352,7 +357,7 @@ func TestEnterRunsTheCommandWhenTheRowIsAlreadyTyped(t *testing.T) {
 	c.Chat.Value, c.Chat.Cursor = "!git status", len("!git status")
 	c.onBashChange(true, "git status")
 	c.bash.SetResults([]mention.Item{{Path: "git status"}, {Path: "git stash"}}, "")
-	c.Chat.BashOpen = true
+	c.showBashPicker()
 
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyEnter, Press: true})
 
@@ -366,7 +371,7 @@ func TestEnterAcceptsARowThatDiffersFromWhatWasTyped(t *testing.T) {
 	c.Chat.Value, c.Chat.Cursor = "!git s", len("!git s")
 	c.onBashChange(true, "git s")
 	c.bash.SetResults([]mention.Item{{Path: "git stash"}}, "")
-	c.Chat.BashOpen = true
+	c.showBashPicker()
 
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyEnter, Press: true})
 
@@ -377,11 +382,11 @@ func TestEnterAcceptsARowThatDiffersFromWhatWasTyped(t *testing.T) {
 func TestNavigationKeysStayWithTheComposerUntilThereAreRows(t *testing.T) {
 	c, _ := wiredComposer(t)
 	c.SetBashPredictor(&fakeBashPredictor{cancelErr: errors.New("still thinking")})
-	// Editing a multi-line command needs the cursor keys, so an empty picker
-	// must not hold them.
+	// Editing a multi-line command needs the cursor keys, so a picker with no
+	// rows must not hold them.
 	pressText(t, c, "!for f in *; do\necho done")
 	c.Chat.Cursor = len(c.Chat.Value)
-	require.True(t, c.bash.Open)
+	require.False(t, c.bash.Open, "nothing to show means nothing on screen")
 
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyUp, Press: true})
 
@@ -389,9 +394,9 @@ func TestNavigationKeysStayWithTheComposerUntilThereAreRows(t *testing.T) {
 }
 
 // Typing on drops the rows of the previous query while the new ranking is in
-// flight. The picker is still up, but with nothing to navigate it has to hand
-// Enter back: otherwise the keystroke after every ranking would need two of
-// them to run the command.
+// flight, and the picker with them: with nothing to navigate it is not on screen
+// to swallow Enter either, so the keystroke after every ranking still needs one
+// press to run the command.
 func TestEnterRunsTheCommandWhileARerankIsInFlight(t *testing.T) {
 	c, bus := wiredComposer(t)
 	c.SetBashPredictor(&fakeBashPredictor{items: []controller.BashSuggestion{{Command: "git stash", Score: 0.9}}})
@@ -402,7 +407,7 @@ func TestEnterRunsTheCommandWhileARerankIsInFlight(t *testing.T) {
 
 	c.SetBashPredictor(&fakeBashPredictor{cancelErr: errors.New("still thinking")})
 	pressKey(t, c, xui.KeyEvent{Code: xui.KeyRune, Rune: 't', Press: true})
-	require.True(t, c.bash.Open, "the picker stays up while it asks")
+	require.False(t, c.bash.Open, "the dropped rows take the picker with them")
 	require.Empty(t, c.bash.Items)
 	require.False(t, c.Chat.BashOpen, "no rows means no key claim")
 
@@ -484,6 +489,29 @@ func TestRepeatedQueryIsNotAskedTwice(t *testing.T) {
 	assert.Len(t, c.bash.Items, 1, "the ranking already in hand is kept")
 	assert.Equal(t, []string{"git s"}, predictor.asked(), "the judge is asked once per distinct query")
 	assert.True(t, c.Chat.BashOpen)
+}
+
+// Esc aimed at a "!" command drops the judgement behind it instead of falling
+// through to the branch that cancels the running turn: with nothing drawn yet,
+// the picker's own state cannot tell the two apart.
+func TestEscapeDropsAJudgementThatHasNotDrawnAnything(t *testing.T) {
+	c, bus := wiredComposer(t)
+	predictor := &fakeBashPredictor{cancelErr: errors.New("still thinking")}
+	c.SetBashPredictor(predictor)
+
+	pressText(t, c, "!git status")
+	waitFor(t, func() bool { return len(predictor.asked()) == 1 })
+	require.False(t, c.bash.Open, "nothing is on screen to dismiss yet")
+
+	pressKey(t, c, xui.KeyEvent{Code: xui.KeyEscape, Press: true})
+
+	// A dropped request stays quiet: no ranking, no picker.
+	time.Sleep(2 * bashSuggestDebounce)
+
+	assert.Empty(t, bus.Drain(), "a dismissed judgement must not come back")
+	assert.False(t, c.bash.Open)
+	assert.False(t, c.Chat.BashOpen)
+	assert.Empty(t, c.bash.Status)
 }
 
 // pressText types value through the composer's real key path, so the completer

@@ -194,9 +194,9 @@ func (c *ComposerPane) HideCompleters() {
 	c.Chat.SlashOpen = false
 	c.question.Hide()
 	c.Chat.QuestionOpen = false
-	c.bash.Hide()
-	c.Chat.BashOpen = false
-	c.abandonBashSuggest()
+	// The "!" picker closes through the one path that also forgets its rows: what
+	// it holds is what it draws, so a picker that is down must hold nothing.
+	c.hideBashSuggestions()
 }
 
 // HidePalette closes the command palette if open.
@@ -785,10 +785,11 @@ func (c *ComposerPane) handleEscape(ctx *components.EventContext) bool {
 		ctx.ConsumeAndRedraw()
 		return true
 	}
-	if c.bash.Open {
-		c.bash.Cancel()
-		c.Chat.BashOpen = false
-		c.abandonBashSuggest()
+	// A judgement in flight is worth dropping even while nothing is on screen
+	// yet. Falling through here would cancel the running turn instead, which is
+	// not what Esc aimed at a "!" command means.
+	if c.bash.Open || c.bashCancel != nil {
+		c.hideBashSuggestions()
 		ctx.ConsumeAndRedraw()
 		return true
 	}

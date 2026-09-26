@@ -37,9 +37,9 @@ func (c *ComposerPane) SetBashPredictor(predictor BashPredictor) {
 // onBashChange reacts to the composer text entering or leaving "!" mode.
 //
 // Two rules keep the picker from getting in the way of running a command:
-//   - it owns the navigation keys only while it has rows to navigate. Until a
-//     ranking arrives, Enter must run what the user typed rather than be
-//     swallowed by an empty list.
+//   - it appears only when it has something to say, and owns the navigation keys
+//     only while it has rows to navigate. Until a ranking arrives, Enter must run
+//     what the user typed rather than be swallowed by an empty list.
 //   - filling the composer is an answer, not a new question, so the text just
 //     accepted is not re-submitted for judgement.
 func (c *ComposerPane) onBashChange(active bool, query string) {
@@ -80,19 +80,25 @@ func (c *ComposerPane) onBashChange(active bool, query string) {
 	// A ranking is only meaningful for the text it was computed for, so rows
 	// from the previous query are dropped rather than shown against new text:
 	// a score list that silently belongs to other text is worse than a blank
-	// list for the round trip it takes to replace it.
-	c.bash.Items = nil
-	c.bash.Status = "Asking Jev…"
-	// Show after the rows are gone, so the key claim matches the list: an open
-	// picker with nothing in it must not swallow Enter.
+	// list for the round trip it takes to replace it. The picker goes with the
+	// rows — a list with nothing in it has nothing to say — and so does any
+	// placeholder for them, however long that round trip turns out to be.
+	c.bash.SetResults(nil, "")
 	c.showBashPicker()
 	c.scheduleBashSuggest(query)
 }
 
-// showBashPicker reveals the picker for the current query. It claims the
-// navigation keys only once there are rows: an open-but-empty list that ate
-// Enter would make running a "!" command need two of them.
+// showBashPicker reveals the picker when it has something to say — rows to walk
+// or a status to read — and claims the navigation keys only with rows: an
+// open-but-empty list that ate Enter would make running a "!" command need two.
+// Visibility is derived from the content here, so no caller has to order its own
+// mutations against it.
 func (c *ComposerPane) showBashPicker() {
+	if len(c.bash.Items) == 0 && c.bash.Status == "" {
+		c.bash.Hide()
+		c.Chat.BashOpen = false
+		return
+	}
 	c.bash.Show()
 	c.Chat.BashOpen = len(c.bash.Items) > 0
 }
@@ -112,11 +118,13 @@ func (c *ComposerPane) bashRowIsTypedText() bool {
 }
 
 // hideBashSuggestions closes the picker and stops the prediction behind it.
-// The query is forgotten with it: re-entering "!" mode is a fresh question.
+// The query is forgotten with it: re-entering "!" mode is a fresh question, and
+// nothing is left behind to answer it with.
 func (c *ComposerPane) hideBashSuggestions() {
 	if c == nil {
 		return
 	}
+	c.bash.SetResults(nil, "")
 	c.bash.Hide()
 	c.Chat.BashOpen = false
 	c.bashQuery = ""
@@ -137,6 +145,10 @@ func (c *ComposerPane) abandonBashSuggest() {
 // scheduleBashSuggest debounces one keystroke's query, then asks the predictor.
 // The work runs off the UI goroutine and answers on the bus, like the @-file
 // search: the composer never blocks on a judgement.
+//
+// Nothing is drawn while it waits. A row saying "asking" would appear a beat
+// before the ranking replaces it, which reads as a flicker rather than as
+// information, and the wait is bounded by bashSuggestTimeout either way.
 func (c *ComposerPane) scheduleBashSuggest(query string) {
 	if c == nil || c.bashPredict == nil {
 		return
@@ -180,7 +192,7 @@ func (c *ComposerPane) scheduleBashSuggest(query string) {
 
 // ApplyBashSuggestions applies one prediction on the UI goroutine.
 func (c *ComposerPane) ApplyBashSuggestions(msg controller.BashSuggestionsMsg) {
-	if c == nil || msg.Gen != c.bashGen || !c.bash.Open {
+	if c == nil || msg.Gen != c.bashGen {
 		return
 	}
 	// The buffer may have moved on without a new prediction being scheduled
@@ -193,7 +205,7 @@ func (c *ComposerPane) ApplyBashSuggestions(msg controller.BashSuggestionsMsg) {
 		// The picker stays up to say why, but with no rows it must not hold the
 		// navigation keys: Enter still has to run what the user typed.
 		c.bash.SetResults(nil, msg.ErrText)
-		c.Chat.BashOpen = false
+		c.showBashPicker()
 		return
 	}
 	if len(msg.Items) == 0 {
@@ -209,9 +221,9 @@ func (c *ComposerPane) ApplyBashSuggestions(msg controller.BashSuggestionsMsg) {
 		})
 	}
 	c.bash.SetResults(items, "")
-	// There are rows to navigate now, so the picker takes the navigation keys
-	// back from the composer.
-	c.Chat.BashOpen = true
+	// There are rows to navigate now, so the picker opens and takes the
+	// navigation keys back from the composer.
+	c.showBashPicker()
 }
 
 // bashSuggestionLabel describes how the row was ranked, so a literal completion
